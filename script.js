@@ -1,8 +1,11 @@
 // State Management
+const TMDB_API_KEY = '4a9f3fe6b13e66b0dd355b7318b7e0e4';
+const PANTRY_ID = 'cinetrack-user-1onur'; // Benzersiz bir ID
+const BASE_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket`;
+
 let state = {
-    apiKey: localStorage.getItem('tmdb_api_key') || '',
-    watched: JSON.parse(localStorage.getItem('watched_list')) || [],
-    watchlist: JSON.parse(localStorage.getItem('watchlist_list')) || [],
+    watched: [],
+    watchlist: [],
     currentView: 'search',
     genres: {}
 };
@@ -16,10 +19,6 @@ const searchResults = document.getElementById('searchResults');
 const watchedList = document.getElementById('watchedList');
 const watchlistContainer = document.getElementById('watchlist');
 const settingsBtn = document.getElementById('settingsBtn');
-const settingsModal = document.getElementById('settingsModal');
-const apiKeyInput = document.getElementById('apiKey');
-const saveApiKeyBtn = document.getElementById('saveApiKey');
-const closeSettingsBtn = document.getElementById('closeSettings');
 const ratingOverlay = document.getElementById('ratingOverlay');
 const cancelRatingBtn = document.getElementById('cancelRating');
 const rateBtns = document.querySelectorAll('.rate-btn');
@@ -33,19 +32,55 @@ let movieToRate = null;
 // --- Initialization ---
 async function init() {
     setupEventListeners();
-    if (state.apiKey) {
-        apiKeyInput.value = state.apiKey;
-        await fetchGenres();
-    } else {
-        settingsModal.classList.add('active');
-    }
+    await fetchGenres();
+    await loadStateFromCloud();
     renderLists();
+}
+
+// --- Cloud Storage Functions (Pantry) ---
+async function loadStateFromCloud() {
+    try {
+        const response = await fetch(`${BASE_URL}/movieData`);
+        if (response.ok) {
+            const cloudData = await response.json();
+            state.watched = cloudData.watched || [];
+            state.watchlist = cloudData.watchlist || [];
+            console.log('Veriler buluttan yüklendi.');
+        } else {
+            console.log('Bulut verisi bulunamadı, yeni sepet oluşturulacak.');
+            await saveStateToCloud(); // Initialize if not exists
+        }
+    } catch (error) {
+        console.error('Bulut yükleme hatası:', error);
+        // Fallback to local
+        state.watched = JSON.parse(localStorage.getItem('watched_list')) || [];
+        state.watchlist = JSON.parse(localStorage.getItem('watchlist_list')) || [];
+    }
+}
+
+async function saveStateToCloud() {
+    try {
+        await fetch(`${BASE_URL}/movieData`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                watched: state.watched,
+                watchlist: state.watchlist
+            })
+        });
+        console.log('Veriler buluta kaydedildi.');
+    } catch (error) {
+        console.error('Bulut kaydetme hatası:', error);
+    }
+    // Also save locally as backup
+    localStorage.setItem('watched_list', JSON.stringify(state.watched));
+    localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
 }
 
 // --- API Functions ---
 async function fetchGenres() {
     try {
-        const response = await fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${state.apiKey}&language=tr-TR`);
+        const response = await fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=tr-TR`);
         const data = await response.json();
         data.genres.forEach(g => {
             state.genres[g.id] = g.name;
@@ -57,14 +92,8 @@ async function fetchGenres() {
 }
 
 async function searchMovies(query) {
-    if (!state.apiKey) {
-        alert('Lütfen önce ayarlardan API anahtarınızı girin.');
-        settingsModal.classList.add('active');
-        return;
-    }
-
     try {
-        const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${state.apiKey}&query=${encodeURIComponent(query)}&language=tr-TR`);
+        const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=tr-TR`);
         const data = await response.json();
         renderSearchResults(data.results);
     } catch (error) {
@@ -76,7 +105,7 @@ async function searchMovies(query) {
 // --- Rendering Functions ---
 function renderSearchResults(movies) {
     searchResults.innerHTML = '';
-    
+
     // Filter out items without posters or those that aren't movie/tv
     const filtered = movies.filter(m => (m.media_type === 'movie' || m.media_type === 'tv') && m.poster_path);
 
@@ -94,12 +123,12 @@ function renderSearchResults(movies) {
 function createMovieCard(movie, context) {
     const card = document.createElement('div');
     card.className = 'movie-card';
-    
+
     const title = movie.title || movie.name;
     const releaseDate = movie.release_date || movie.first_air_date || '';
     const year = releaseDate ? releaseDate.split('-')[0] : 'N/A';
     const posterUrl = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
-    
+
     const isWatched = state.watched.find(m => m.id === movie.id);
     const isWatchlist = state.watchlist.find(m => m.id === movie.id);
 
@@ -183,7 +212,7 @@ function updateFilterOptions() {
         if (m.genre_ids) m.genre_ids.forEach(id => categories.add(id));
     });
 
-    const categoryOptions = '<option value="all">Tüm Kategoriler</option>' + 
+    const categoryOptions = '<option value="all">Tüm Kategoriler</option>' +
         Array.from(categories)
             .sort((a, b) => (state.genres[a] || '').localeCompare(state.genres[b] || ''))
             .map(id => `<option value="${id}">${state.genres[id] || 'Bilinmeyen'}</option>`)
@@ -222,8 +251,7 @@ window.removeFromWatchlist = (id) => {
 };
 
 function saveState() {
-    localStorage.setItem('watched_list', JSON.stringify(state.watched));
-    localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
+    saveStateToCloud();
     updateFilterOptions();
 }
 
@@ -235,7 +263,7 @@ function setupEventListeners() {
             const viewId = btn.getAttribute('data-view');
             navBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            
+
             views.forEach(v => v.classList.remove('active'));
             document.getElementById(`${viewId}View`).classList.add('active');
         });
@@ -247,15 +275,8 @@ function setupEventListeners() {
         if (e.key === 'Enter') searchMovies(searchInput.value);
     });
 
-    // Settings
-    settingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
-    closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
-    saveApiKeyBtn.addEventListener('click', () => {
-        state.apiKey = apiKeyInput.value.trim();
-        localStorage.setItem('tmdb_api_key', state.apiKey);
-        settingsModal.classList.remove('active');
-        fetchGenres();
-    });
+    // Settings (Hidden/Disabled)
+    if (settingsBtn) settingsBtn.style.display = 'none';
 
     // Rating
     rateBtns.forEach(btn => {
