@@ -1,6 +1,4 @@
 const TMDB_API_KEY = '4a9f3fe6b13e66b0dd355b7318b7e0e4';
-const PANTRY_ID = '8b4f1234-a67b-4d56-b8c9-0e1f2a3b4c5d';
-const CLOUD_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/movieData`;
 const LOCAL_URL = 'http://localhost:3000/data';
 
 let isLocalServerAvailable = false;
@@ -9,7 +7,11 @@ let state = {
     watched: [],
     watchlist: [],
     currentView: 'search',
-    genres: {}
+    genres: {},
+    cloudSettings: {
+        url: localStorage.getItem('supabase_url') || '',
+        key: localStorage.getItem('supabase_key') || ''
+    }
 };
 
 // --- DOM Elements ---
@@ -31,9 +33,11 @@ const watchedCategoryFilter = document.getElementById('watchedCategoryFilter');
 const watchedRatingFilter = document.getElementById('watchedRatingFilter');
 const watchlistSearch = document.getElementById('watchlistSearch');
 const syncStatus = document.getElementById('syncStatus');
-const backupBtn = document.getElementById('backupBtn');
-const restoreBtn = document.getElementById('restoreBtn');
-const restoreFile = document.getElementById('restoreFile');
+const settingsModal = document.getElementById('settingsModal');
+const saveCloudSettingsBtn = document.getElementById('saveCloudSettings');
+const closeSettingsModalBtn = document.getElementById('closeSettingsModal');
+const supabaseUrlInput = document.getElementById('supabaseUrl');
+const supabaseKeyInput = document.getElementById('supabaseKey');
 
 let movieToRate = null;
 
@@ -42,6 +46,11 @@ async function init() {
     setupEventListeners();
     await fetchGenres();
     await checkLocalServer();
+
+    // Fill settings inputs
+    if (supabaseUrlInput) supabaseUrlInput.value = state.cloudSettings.url;
+    if (supabaseKeyInput) supabaseKeyInput.value = state.cloudSettings.key;
+
     await loadStateFromCloud();
     renderLists();
 }
@@ -90,31 +99,49 @@ async function loadStateFromCloud() {
     state.watched = localWatched;
     state.watchlist = localWatchlist;
 
-    const targetUrl = isLocalServerAvailable ? LOCAL_URL : CLOUD_URL;
-
-    try {
-        const response = await fetch(targetUrl);
-
-        if (response.ok) {
-            const remoteData = await response.json();
-            // Data Merging
-            state.watched = mergeMovieLists(localWatched, remoteData.watched || []);
-            state.watchlist = mergeMovieLists(localWatchlist, remoteData.watchlist || []);
-
-            saveStateToLocal();
-            // sync back if needed
-            await saveStateToCloudBase(false);
-            updateSyncUI(isLocalServerAvailable ? 'Dosya Senkronize' : 'Bulut Güncel', 'success');
-        } else if (response.status === 404 || response.status === 400) {
-            if (state.watched.length > 0 || state.watchlist.length > 0) {
-                await saveStateToCloudBase();
-            } else {
-                updateSyncUI('Hazır', 'success');
+    if (isLocalServerAvailable) {
+        try {
+            const response = await fetch(LOCAL_URL);
+            if (response.ok) {
+                const remoteData = await response.json();
+                state.watched = mergeMovieLists(localWatched, remoteData.watched || []);
+                state.watchlist = mergeMovieLists(localWatchlist, remoteData.watchlist || []);
+                saveStateToLocal();
+                updateSyncUI('Dosya Senkronize', 'success');
             }
+        } catch (e) {
+            console.error('Lokal sunucu yükleme hatası:', e);
+            updateSyncUI('Yerel Hata', 'error');
         }
-    } catch (error) {
-        console.error('Senkronizasyon hatası:', error);
-        updateSyncUI('Bağlantı Hatası', 'error');
+    } else if (state.cloudSettings.url && state.cloudSettings.key) {
+        try {
+            // Supabase REST API - Get data
+            const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker?id=eq.default`, {
+                headers: {
+                    'apikey': state.cloudSettings.key,
+                    'Authorization': `Bearer ${state.cloudSettings.key}`
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.length > 0) {
+                    const cloudData = data[0].content;
+                    state.watched = mergeMovieLists(localWatched, cloudData.watched || []);
+                    state.watchlist = mergeMovieLists(localWatchlist, cloudData.watchlist || []);
+                    saveStateToLocal();
+                    updateSyncUI('Bulut Güncel', 'success');
+                } else {
+                    updateSyncUI('Bulut Boş', 'success');
+                }
+            } else {
+                updateSyncUI('Bulut Hatası', 'error');
+            }
+        } catch (e) {
+            console.error('Supabase yükleme hatası:', e);
+            updateSyncUI('Bağlantı Hatası', 'error');
+        }
+    } else {
+        updateSyncUI('Bulut Kapalı', 'success');
     }
 
     renderLists();
@@ -138,28 +165,57 @@ function saveStateToLocal() {
 async function saveStateToCloudBase(showUI = true) {
     if (showUI) updateSyncUI('Kaydediliyor...', 'active');
 
-    const targetUrl = isLocalServerAvailable ? LOCAL_URL : CLOUD_URL;
-
-    try {
-        const response = await fetch(targetUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                watched: state.watched,
-                watchlist: state.watchlist,
-                lastUpdated: new Date().getTime()
-            })
-        });
-        if (showUI) {
-            if (response.ok) updateSyncUI(isLocalServerAvailable ? 'Dosyaya Kaydedildi' : 'Buluta Kaydedildi', 'success');
-            else updateSyncUI('Hata Oluştu', 'error');
+    if (isLocalServerAvailable) {
+        try {
+            const response = await fetch(LOCAL_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    watched: state.watched,
+                    watchlist: state.watchlist,
+                    lastUpdated: new Date().getTime()
+                })
+            });
+            if (showUI) {
+                if (response.ok) updateSyncUI('Dosyaya Kaydedildi', 'success');
+                else updateSyncUI('Dosya Hatası', 'error');
+            }
+            return response.ok;
+        } catch (e) {
+            if (showUI) updateSyncUI('Yerel Hata', 'error');
+            return false;
         }
-        return response.ok;
-    } catch (error) {
-        console.error('Kayıt hatası:', error);
-        if (showUI) updateSyncUI('Hata Oluştu', 'error');
-        return false;
+    } else if (state.cloudSettings.url && state.cloudSettings.key) {
+        try {
+            // Supabase REST API - UPSERT logic
+            const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker`, {
+                method: 'POST',
+                headers: {
+                    'apikey': state.cloudSettings.key,
+                    'Authorization': `Bearer ${state.cloudSettings.key}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates'
+                },
+                body: JSON.stringify({
+                    id: 'default',
+                    content: {
+                        watched: state.watched,
+                        watchlist: state.watchlist,
+                        lastUpdated: new Date().getTime()
+                    }
+                })
+            });
+            if (showUI) {
+                if (response.ok) updateSyncUI('Buluta Kaydedildi', 'success');
+                else updateSyncUI('Bulut Hatası', 'error');
+            }
+            return response.ok;
+        } catch (e) {
+            if (showUI) updateSyncUI('Bağlantı Hatası', 'error');
+            return false;
+        }
     }
+    return false;
 }
 
 async function saveState() {
@@ -497,6 +553,26 @@ function setupEventListeners() {
     backupBtn.addEventListener('click', downloadData);
     restoreBtn.addEventListener('click', () => restoreFile.click());
     restoreFile.addEventListener('change', handleRestore);
+
+    // Settings Modal
+    settingsBtn.addEventListener('click', () => {
+        settingsModal.classList.add('active');
+    });
+
+    closeSettingsModalBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('active');
+    });
+
+    saveCloudSettingsBtn.addEventListener('click', async () => {
+        state.cloudSettings.url = supabaseUrlInput.value.trim();
+        state.cloudSettings.key = supabaseKeyInput.value.trim();
+
+        localStorage.setItem('supabase_url', state.cloudSettings.url);
+        localStorage.setItem('supabase_key', state.cloudSettings.key);
+
+        settingsModal.classList.remove('active');
+        await loadStateFromCloud();
+    });
 }
 
 // Run Init
