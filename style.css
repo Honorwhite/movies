@@ -776,8 +776,42 @@ body {
     }
 
     .movie-grid {
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: 1rem;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.8rem;
+    }
+
+    .movie-info {
+        padding: 0.5rem;
+    }
+
+    .movie-info h3 {
+        font-size: 0.8rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .movie-meta {
+        font-size: 0.7rem;
+    }
+
+    .card-actions {
+        padding: 0.4rem;
+        gap: 4px;
+    }
+
+    .action-btn {
+        padding: 0.4rem;
+        font-size: 0.75rem;
+    }
+
+    .action-btn i {
+        font-size: 0.7rem;
+    }
+
+    .action-btn.remove-btn {
+        width: 30px;
+        height: 30px;
+        top: 8px;
+        left: 8px;
     }
 }
 
