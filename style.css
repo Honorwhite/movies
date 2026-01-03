@@ -803,8 +803,21 @@ body {
         font-size: 0.75rem;
     }
 
+    .action-btn span {
+        display: none;
+    }
+
     .action-btn i {
-        font-size: 0.7rem;
+        font-size: 0.8rem;
+    }
+
+    .rating-badge span {
+        display: none;
+    }
+
+    .rating-badge {
+        padding: 0.3rem 0.4rem;
+        font-size: 1rem;
     }
 
     .action-btn.remove-btn {

@@ -39,6 +39,11 @@ const closeSettingsModalBtn = document.getElementById('closeSettingsModal');
 const supabaseUrlInput = document.getElementById('supabaseUrl');
 const supabaseKeyInput = document.getElementById('supabaseKey');
 
+const backupBtn = document.getElementById('backupBtn');
+const restoreBtn = document.getElementById('restoreBtn');
+const restoreFile = document.getElementById('restoreFile');
+const watchedSearch = document.getElementById('watchedSearch');
+
 let movieToRate = null;
 
 // --- Initialization ---
@@ -57,14 +62,22 @@ async function init() {
 
 async function checkLocalServer() {
     try {
-        const response = await fetch(LOCAL_URL, { method: 'GET' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1000); // 1 saniye timeout
+
+        const response = await fetch(LOCAL_URL, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
         isLocalServerAvailable = response.ok;
         if (isLocalServerAvailable) {
-            console.log('Yerel sunucu (server.js) aktif. Veriler movies.json dosyasına kaydedilecek.');
+            console.log('Yerel sunucu aktif.');
         }
     } catch (e) {
         isLocalServerAvailable = false;
-        console.log('Yerel sunucu aktif değil. Bulut yedekleme kullanılacak.');
+        console.log('Yerel sunucu yok, bulut kullanılacak.');
     }
 }
 
@@ -95,9 +108,12 @@ async function loadStateFromCloud() {
 
     const localWatched = JSON.parse(localStorage.getItem('watched_list')) || [];
     const localWatchlist = JSON.parse(localStorage.getItem('watchlist_list')) || [];
+    const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
 
     state.watched = localWatched;
     state.watchlist = localWatchlist;
+
+    console.log('Yerel veriler yüklendi. Zaman damgası:', localTimestamp);
 
     if (isLocalServerAvailable) {
         try {
@@ -105,25 +121,27 @@ async function loadStateFromCloud() {
             if (response.ok) {
                 const remoteData = await response.json();
                 const remoteTimestamp = remoteData.lastUpdated || 0;
-                const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
 
                 if (remoteTimestamp > localTimestamp) {
+                    console.log('Dosya verisi yerelden yeni, güncelleniyor.');
                     state.watched = remoteData.watched || [];
                     state.watchlist = remoteData.watchlist || [];
-                    saveStateToLocal(false); // Update local without updating timestamp
+                    saveStateToLocal(false);
                     updateSyncUI('Dosyadan Yüklendi', 'success');
-                } else {
-                    await saveStateToCloudBase(false); // Push local to file
+                } else if (remoteTimestamp < localTimestamp && localTimestamp > 0) {
+                    console.log('Yerel veri dosyadan yeni, dosyaya aktarılıyor.');
+                    await saveStateToCloudBase(false);
                     updateSyncUI('Dosya Güncellendi', 'success');
+                } else {
+                    updateSyncUI('Dosya Güncel', 'success');
                 }
             }
         } catch (e) {
-            console.error('Lokal sunucu yükleme hatası:', e);
+            console.error('Lokal sunucu hatası:', e);
             updateSyncUI('Yerel Hata', 'error');
         }
     } else if (state.cloudSettings.url && state.cloudSettings.key) {
         try {
-            // Supabase REST API - Get data
             const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker?id=eq.default`, {
                 headers: {
                     'apikey': state.cloudSettings.key,
@@ -135,31 +153,43 @@ async function loadStateFromCloud() {
                 if (data.length > 0) {
                     const cloudData = data[0].content;
                     const remoteTimestamp = cloudData.lastUpdated || 0;
-                    const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
+
+                    console.log('Bulut verisi zaman damgası:', remoteTimestamp);
 
                     if (remoteTimestamp > localTimestamp) {
+                        console.log('Bulut verisi yerelden yeni, güncelleniyor.');
                         state.watched = cloudData.watched || [];
                         state.watchlist = cloudData.watchlist || [];
                         saveStateToLocal(false);
                         updateSyncUI('Buluttan Alındı', 'success');
-                    } else {
+                    } else if (remoteTimestamp < localTimestamp && (localWatched.length > 0 || localWatchlist.length > 0)) {
+                        console.log('Yerel veri buluttan yeni, buluta aktarılıyor.');
                         await saveStateToCloudBase(false);
                         updateSyncUI('Bulut Güncellendi', 'success');
+                    } else {
+                        updateSyncUI('Bulut Güncel', 'success');
                     }
                 } else {
-                    updateSyncUI('Bulut Hazır', 'success');
+                    console.log('Bulutta veri yok.');
+                    if (localWatched.length > 0 || localWatchlist.length > 0) {
+                        console.log('Yerel veri buluta ilk kez yükleniyor.');
+                        await saveStateToCloudBase(false);
+                        updateSyncUI('Buluta Aktarıldı', 'success');
+                    } else {
+                        updateSyncUI('Bulut Boş', 'success');
+                    }
                 }
             } else {
                 const errorText = await response.text();
-                console.error('Supabase Yükleme Hatası detayı:', response.status, errorText);
+                console.error('Supabase Yükleme Hatası:', response.status, errorText);
                 updateSyncUI('Bulut Hatası', 'error');
             }
         } catch (e) {
-            console.error('Supabase bağlantı hatası:', e);
+            console.error('Supabase Bağlantı Hatası:', e);
             updateSyncUI('Bağlantı Hatası', 'error');
         }
     } else {
-        updateSyncUI('Bulut Kapalı', 'success');
+        updateSyncUI('Bulut Devre Dışı', 'success');
     }
 
     renderLists();
@@ -386,6 +416,8 @@ function renderSearchResults(movies) {
 function createMovieCard(movie, context) {
     const card = document.createElement('div');
     card.className = 'movie-card';
+    card.setAttribute('data-id', movie.id);
+    card.setAttribute('data-context', context);
 
     const title = movie.title || movie.name;
     const releaseDate = movie.release_date || movie.first_air_date || '';
@@ -397,7 +429,7 @@ function createMovieCard(movie, context) {
 
     let ratingBadge = '';
     if (context === 'watched' && movie.userRating) {
-        const ratingLabels = { good: 'İyi 😍', meh: 'Eh İşte 😐', bad: 'Kötü 💩' };
+        const ratingLabels = { good: '<span>İyi</span> 😍', meh: '<span>Eh İşte</span> 😐', bad: '<span>Kötü</span> 💩' };
         ratingBadge = `<div class="rating-badge badge-${movie.userRating}">${ratingLabels[movie.userRating]}</div>`;
     }
 
@@ -431,17 +463,17 @@ function createMovieCard(movie, context) {
             ${context === 'search' ? `
                 <button class="action-btn watched-btn ${isWatched ? 'is-added' : ''}" 
                         onclick="${isWatched ? '' : `openRatingModal(${movie.id}, ${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
-                    <i class="fas fa-check"></i> ${isWatched ? 'İzlendi' : 'İzledim'}
+                    <i class="fas fa-check"></i> <span>${isWatched ? 'İzlendi' : 'İzledim'}</span>
                 </button>
                 <button class="action-btn watchlist-btn ${isWatchlist ? 'is-added' : ''}" 
                         onclick="${isWatchlist ? '' : `addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
-                    <i class="fas fa-plus"></i> ${isWatchlist ? 'Listede' : 'İzlenecek'}
+                    <i class="fas fa-plus"></i> <span>${isWatchlist ? 'Listede' : 'İzlenecek'}</span>
                 </button>
             ` : ''}
             
             ${context === 'watchlist' ? `
                 <button class="action-btn watched-btn" onclick="openRatingModal(${movie.id}, ${JSON.stringify(movie).replace(/"/g, '&quot;')})">
-                    <i class="fas fa-check"></i> İzledim
+                    <i class="fas fa-check"></i> <span>İzledim</span>
                 </button>
             ` : ''}
         </div>
@@ -494,6 +526,22 @@ function updateFilterOptions() {
 }
 
 // --- Action Functions ---
+function removeCardFromSearch(id) {
+    const card = searchResults.querySelector(`.movie-card[data-id="${id}"][data-context="search"]`);
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            if (card.parentNode === searchResults) {
+                searchResults.removeChild(card);
+                if (searchResults.children.length === 0) {
+                    searchResults.innerHTML = '<p class="no-results">Sonuç bulunamadı.</p>';
+                }
+            }
+        }, 300);
+    }
+}
+
 window.addToWatchlist = (movie) => {
     if (state.watchlist.find(m => m.id === movie.id)) {
         alert('Bu zaten izlenecekler listenizde!');
@@ -502,6 +550,7 @@ window.addToWatchlist = (movie) => {
     state.watchlist.push(movie);
     saveState();
     renderLists();
+    removeCardFromSearch(movie.id);
 };
 
 window.openRatingModal = (id, movie) => {
@@ -536,71 +585,90 @@ function setupEventListeners() {
     });
 
     // Search
-    searchBtn.addEventListener('click', () => searchMovies(searchInput.value));
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') searchMovies(searchInput.value);
-    });
-    searchInput.addEventListener('input', () => {
-        if (!searchInput.value.trim()) {
-            searchResults.innerHTML = '';
-            updateFeaturedCarousel();
-        }
-    });
-
-    // Settings
-    if (settingsBtn) settingsBtn.style.display = 'flex';
-
-    // Rating
-    rateBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const rating = btn.getAttribute('data-rating');
-            if (movieToRate) {
-                // Remove from watchlist if there
-                state.watchlist = state.watchlist.filter(m => m.id !== movieToRate.id);
-                // Add to watched
-                movieToRate.userRating = rating;
-                state.watched.push(movieToRate);
-                saveState();
-                renderLists();
-                ratingOverlay.classList.remove('active');
-                movieToRate = null;
+    if (typeof searchBtn !== 'undefined' && searchBtn) searchBtn.addEventListener('click', () => searchMovies(searchInput.value));
+    if (typeof searchInput !== 'undefined' && searchInput) {
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchMovies(searchInput.value);
+        });
+        searchInput.addEventListener('input', () => {
+            if (!searchInput.value.trim()) {
+                searchResults.innerHTML = '';
+                updateFeaturedCarousel();
             }
         });
-    });
+    }
 
-    cancelRatingBtn.addEventListener('click', () => {
-        ratingOverlay.classList.remove('active');
-        movieToRate = null;
-    });
+    // Settings
+    if (typeof settingsBtn !== 'undefined' && settingsBtn) settingsBtn.style.display = 'flex';
+
+    // Rating
+    if (typeof rateBtns !== 'undefined' && rateBtns) {
+        rateBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const rating = btn.getAttribute('data-rating');
+                if (movieToRate) {
+                    state.watchlist = state.watchlist.filter(m => m.id !== movieToRate.id);
+                    movieToRate.userRating = rating;
+                    state.watched.push(movieToRate);
+                    const movieIdToRemove = movieToRate.id;
+                    saveState();
+                    renderLists();
+                    removeCardFromSearch(movieIdToRemove);
+                    if (ratingOverlay) ratingOverlay.classList.remove('active');
+                    movieToRate = null;
+                }
+            });
+        });
+    }
+
+    if (typeof cancelRatingBtn !== 'undefined' && cancelRatingBtn) {
+        cancelRatingBtn.addEventListener('click', () => {
+            if (typeof ratingOverlay !== 'undefined' && ratingOverlay) ratingOverlay.classList.remove('active');
+            movieToRate = null;
+        });
+    }
 
     // Filters
-    watchedCategoryFilter.addEventListener('change', renderLists);
-    watchedRatingFilter.addEventListener('change', renderLists);
-    watchedSearch.addEventListener('input', renderLists);
+    if (typeof watchedCategoryFilter !== 'undefined' && watchedCategoryFilter) watchedCategoryFilter.addEventListener('change', renderLists);
+    if (typeof watchedRatingFilter !== 'undefined' && watchedRatingFilter) watchedRatingFilter.addEventListener('change', renderLists);
+    if (typeof watchedSearch !== 'undefined' && watchedSearch) watchedSearch.addEventListener('input', renderLists);
+
     // Backup & Restore
-    backupBtn.addEventListener('click', downloadData);
-    restoreBtn.addEventListener('click', () => restoreFile.click());
-    restoreFile.addEventListener('change', handleRestore);
+    if (typeof backupBtn !== 'undefined' && backupBtn) backupBtn.addEventListener('click', downloadData);
+    if (typeof restoreBtn !== 'undefined' && restoreBtn) {
+        restoreBtn.addEventListener('click', () => {
+            if (typeof restoreFile !== 'undefined' && restoreFile) restoreFile.click();
+        });
+    }
+    if (typeof restoreFile !== 'undefined' && restoreFile) restoreFile.addEventListener('change', handleRestore);
 
     // Settings Modal
-    settingsBtn.addEventListener('click', () => {
-        settingsModal.classList.add('active');
-    });
+    if (typeof settingsBtn !== 'undefined' && settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.add('active');
+        });
+    }
 
-    closeSettingsModalBtn.addEventListener('click', () => {
-        settingsModal.classList.remove('active');
-    });
+    if (typeof closeSettingsModalBtn !== 'undefined' && closeSettingsModalBtn) {
+        closeSettingsModalBtn.addEventListener('click', () => {
+            if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.remove('active');
+        });
+    }
 
-    saveCloudSettingsBtn.addEventListener('click', async () => {
-        state.cloudSettings.url = supabaseUrlInput.value.trim();
-        state.cloudSettings.key = supabaseKeyInput.value.trim();
+    if (typeof saveCloudSettingsBtn !== 'undefined' && saveCloudSettingsBtn) {
+        saveCloudSettingsBtn.addEventListener('click', async () => {
+            if (typeof supabaseUrlInput !== 'undefined' && supabaseUrlInput && typeof supabaseKeyInput !== 'undefined' && supabaseKeyInput) {
+                state.cloudSettings.url = supabaseUrlInput.value.trim();
+                state.cloudSettings.key = supabaseKeyInput.value.trim();
 
-        localStorage.setItem('supabase_url', state.cloudSettings.url);
-        localStorage.setItem('supabase_key', state.cloudSettings.key);
+                localStorage.setItem('supabase_url', state.cloudSettings.url);
+                localStorage.setItem('supabase_key', state.cloudSettings.key);
+            }
 
-        settingsModal.classList.remove('active');
-        await loadStateFromCloud();
-    });
+            if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.remove('active');
+            await loadStateFromCloud();
+        });
+    }
 }
 
 // Run Init
