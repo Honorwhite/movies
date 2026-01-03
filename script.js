@@ -9,8 +9,8 @@ let state = {
     currentView: 'search',
     genres: {},
     cloudSettings: {
-        url: localStorage.getItem('supabase_url') || '',
-        key: localStorage.getItem('supabase_key') || ''
+        url: localStorage.getItem('supabase_url') || 'https://gbdqycgclxhblhhjhpbm.supabase.co',
+        key: localStorage.getItem('supabase_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
     }
 };
 
@@ -104,10 +104,18 @@ async function loadStateFromCloud() {
             const response = await fetch(LOCAL_URL);
             if (response.ok) {
                 const remoteData = await response.json();
-                state.watched = mergeMovieLists(localWatched, remoteData.watched || []);
-                state.watchlist = mergeMovieLists(localWatchlist, remoteData.watchlist || []);
-                saveStateToLocal();
-                updateSyncUI('Dosya Senkronize', 'success');
+                const remoteTimestamp = remoteData.lastUpdated || 0;
+                const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
+
+                if (remoteTimestamp > localTimestamp) {
+                    state.watched = remoteData.watched || [];
+                    state.watchlist = remoteData.watchlist || [];
+                    saveStateToLocal(false); // Update local without updating timestamp
+                    updateSyncUI('Dosyadan Yüklendi', 'success');
+                } else {
+                    await saveStateToCloudBase(false); // Push local to file
+                    updateSyncUI('Dosya Güncellendi', 'success');
+                }
             }
         } catch (e) {
             console.error('Lokal sunucu yükleme hatası:', e);
@@ -126,18 +134,28 @@ async function loadStateFromCloud() {
                 const data = await response.json();
                 if (data.length > 0) {
                     const cloudData = data[0].content;
-                    state.watched = mergeMovieLists(localWatched, cloudData.watched || []);
-                    state.watchlist = mergeMovieLists(localWatchlist, cloudData.watchlist || []);
-                    saveStateToLocal();
-                    updateSyncUI('Bulut Güncel', 'success');
+                    const remoteTimestamp = cloudData.lastUpdated || 0;
+                    const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
+
+                    if (remoteTimestamp > localTimestamp) {
+                        state.watched = cloudData.watched || [];
+                        state.watchlist = cloudData.watchlist || [];
+                        saveStateToLocal(false);
+                        updateSyncUI('Buluttan Alındı', 'success');
+                    } else {
+                        await saveStateToCloudBase(false);
+                        updateSyncUI('Bulut Güncellendi', 'success');
+                    }
                 } else {
-                    updateSyncUI('Bulut Boş', 'success');
+                    updateSyncUI('Bulut Hazır', 'success');
                 }
             } else {
+                const errorText = await response.text();
+                console.error('Supabase Yükleme Hatası detayı:', response.status, errorText);
                 updateSyncUI('Bulut Hatası', 'error');
             }
         } catch (e) {
-            console.error('Supabase yükleme hatası:', e);
+            console.error('Supabase bağlantı hatası:', e);
             updateSyncUI('Bağlantı Hatası', 'error');
         }
     } else {
@@ -156,9 +174,14 @@ function mergeMovieLists(list1, list2) {
     return Array.from(combinedMap.values());
 }
 
-function saveStateToLocal() {
+function saveStateToLocal(updateTimestamp = true) {
+    const now = new Date().getTime();
+    if (updateTimestamp) {
+        localStorage.setItem('last_updated', now.toString());
+    }
     localStorage.setItem('watched_list', JSON.stringify(state.watched));
     localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
+    return now;
 }
 
 // Sadece buluta/dosyaya kaydeder
@@ -173,7 +196,7 @@ async function saveStateToCloudBase(showUI = true) {
                 body: JSON.stringify({
                     watched: state.watched,
                     watchlist: state.watchlist,
-                    lastUpdated: new Date().getTime()
+                    lastUpdated: parseInt(localStorage.getItem('last_updated')) || new Date().getTime()
                 })
             });
             if (showUI) {
@@ -201,13 +224,18 @@ async function saveStateToCloudBase(showUI = true) {
                     content: {
                         watched: state.watched,
                         watchlist: state.watchlist,
-                        lastUpdated: new Date().getTime()
+                        lastUpdated: parseInt(localStorage.getItem('last_updated')) || new Date().getTime()
                     }
                 })
             });
             if (showUI) {
-                if (response.ok) updateSyncUI('Buluta Kaydedildi', 'success');
-                else updateSyncUI('Bulut Hatası', 'error');
+                if (response.ok) {
+                    updateSyncUI('Buluta Kaydedildi', 'success');
+                } else {
+                    const errorText = await response.text();
+                    console.error('Supabase Kayıt Hatası detayı:', response.status, errorText);
+                    updateSyncUI('Bulut Hatası', 'error');
+                }
             }
             return response.ok;
         } catch (e) {
@@ -519,8 +547,8 @@ function setupEventListeners() {
         }
     });
 
-    // Settings (Hidden/Disabled)
-    if (settingsBtn) settingsBtn.style.display = 'none';
+    // Settings
+    if (settingsBtn) settingsBtn.style.display = 'flex';
 
     // Rating
     rateBtns.forEach(btn => {
