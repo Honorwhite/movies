@@ -7,7 +7,9 @@ let state = {
     watched: [],
     watchlist: [],
     currentView: 'search',
-    genres: {},
+    watched: [],
+    watchlist: [],
+    currentView: 'search',
     cloudSettings: {
         url: localStorage.getItem('supabase_url') || 'https://gbdqycgclxhblhhjhpbm.supabase.co',
         key: localStorage.getItem('supabase_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
@@ -25,12 +27,10 @@ const watchlistContainer = document.getElementById('watchlist');
 const featuredCarousel = document.getElementById('featuredCarousel');
 const carouselTrack = document.getElementById('carouselTrack');
 const settingsBtn = document.getElementById('settingsBtn');
-const ratingOverlay = document.getElementById('ratingOverlay');
-const cancelRatingBtn = document.getElementById('cancelRating');
-const rateBtns = document.querySelectorAll('.rate-btn');
+const cancelRatingBtn = null; // Removed
+const rateBtns = null; // Removed
 
-const watchedCategoryFilter = document.getElementById('watchedCategoryFilter');
-const watchedRatingFilter = document.getElementById('watchedRatingFilter');
+
 const watchlistSearch = document.getElementById('watchlistSearch');
 const syncStatus = document.getElementById('syncStatus');
 const settingsModal = document.getElementById('settingsModal');
@@ -49,7 +49,6 @@ let movieToRate = null;
 // --- Initialization ---
 async function init() {
     setupEventListeners();
-    await fetchGenres();
     await checkLocalServer();
 
     // Fill settings inputs
@@ -278,7 +277,6 @@ async function saveStateToCloudBase(showUI = true) {
 
 async function saveState() {
     saveStateToLocal();
-    updateFilterOptions();
     updateFeaturedCarousel();
     await saveStateToCloudBase();
 }
@@ -332,18 +330,7 @@ function handleRestore(event) {
 }
 
 // --- API Functions ---
-async function fetchGenres() {
-    try {
-        const response = await fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=tr-TR`);
-        const data = await response.json();
-        data.genres.forEach(g => {
-            state.genres[g.id] = g.name;
-        });
-        updateFilterOptions();
-    } catch (error) {
-        console.error('Genre fetch error:', error);
-    }
-}
+
 
 async function searchMovies(query) {
     if (!query) {
@@ -353,7 +340,7 @@ async function searchMovies(query) {
     }
 
     try {
-        const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=tr-TR`);
+        const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=en-US`);
         const data = await response.json();
         renderSearchResults(data.results);
     } catch (error) {
@@ -427,12 +414,6 @@ function createMovieCard(movie, context) {
     const isWatched = state.watched.find(m => m.id === movie.id);
     const isWatchlist = state.watchlist.find(m => m.id === movie.id);
 
-    let ratingBadge = '';
-    if (context === 'watched' && movie.userRating) {
-        const ratingLabels = { good: '<span>İyi</span> 😍', meh: '<span>Eh İşte</span> 😐', bad: '<span>Kötü</span> 💩' };
-        ratingBadge = `<div class="rating-badge badge-${movie.userRating}">${ratingLabels[movie.userRating]}</div>`;
-    }
-
     const removeBtnHtml = (context === 'watched' || context === 'watchlist') ? `
         <button class="action-btn remove-btn" onclick="event.stopPropagation(); ${context === 'watched' ? `removeFromWatched(${movie.id})` : `removeFromWatchlist(${movie.id})`}" title="Listeden Kaldır">
             <i class="fas fa-times"></i>
@@ -444,7 +425,6 @@ function createMovieCard(movie, context) {
     card.innerHTML = `
         <div class="poster-container" onclick="window.open('${watchUrl}', '_blank')" style="cursor: pointer;">
             ${removeBtnHtml}
-            ${ratingBadge}
             <img src="${posterUrl}" alt="${title}" loading="lazy">
             <div class="card-overlay">
                 <div class="play-overlay">
@@ -462,7 +442,7 @@ function createMovieCard(movie, context) {
         <div class="card-actions">
             ${context === 'search' ? `
                 <button class="action-btn watched-btn ${isWatched ? 'is-added' : ''}" 
-                        onclick="${isWatched ? '' : `openRatingModal(${movie.id}, ${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
+                        onclick="${isWatched ? '' : `addToWatched(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
                     <i class="fas fa-check"></i> <span>${isWatched ? 'İzlendi' : 'İzledim'}</span>
                 </button>
                 <button class="action-btn watchlist-btn ${isWatchlist ? 'is-added' : ''}" 
@@ -472,7 +452,7 @@ function createMovieCard(movie, context) {
             ` : ''}
             
             ${context === 'watchlist' ? `
-                <button class="action-btn watched-btn" onclick="openRatingModal(${movie.id}, ${JSON.stringify(movie).replace(/"/g, '&quot;')})">
+                <button class="action-btn watched-btn" onclick="addToWatched(${JSON.stringify(movie).replace(/"/g, '&quot;')})">
                     <i class="fas fa-check"></i> <span>İzledim</span>
                 </button>
             ` : ''}
@@ -483,7 +463,7 @@ function createMovieCard(movie, context) {
 
 function renderLists() {
     // Render Watched List
-    const watchedFiltered = filterList(state.watched, watchedCategoryFilter.value, watchedRatingFilter.value, watchedSearch.value);
+    const watchedFiltered = filterList(state.watched, watchedSearch.value);
     watchedList.innerHTML = '';
     watchedFiltered.forEach(movie => watchedList.appendChild(createMovieCard(movie, 'watched')));
     if (watchedFiltered.length === 0) {
@@ -491,7 +471,7 @@ function renderLists() {
     }
 
     // Render Watchlist
-    const watchlistFiltered = filterList(state.watchlist, watchlistCategoryFilter.value, 'all', watchlistSearch.value);
+    const watchlistFiltered = filterList(state.watchlist, watchlistSearch.value);
     watchlistContainer.innerHTML = '';
     watchlistFiltered.forEach(movie => watchlistContainer.appendChild(createMovieCard(movie, 'watchlist')));
     if (watchlistFiltered.length === 0) {
@@ -499,31 +479,15 @@ function renderLists() {
     }
 }
 
-function filterList(list, category, rating, searchQuery) {
+function filterList(list, searchQuery) {
     return list.filter(m => {
         const title = (m.title || m.name || '').toLowerCase();
         const searchMatch = !searchQuery || title.includes(searchQuery.toLowerCase());
-        const categoryMatch = category === 'all' || (m.genre_ids && m.genre_ids.includes(parseInt(category)));
-        const ratingMatch = rating === 'all' || m.userRating === rating;
-        return searchMatch && categoryMatch && ratingMatch;
+        return searchMatch;
     });
 }
 
-function updateFilterOptions() {
-    const categories = new Set();
-    [...state.watched, ...state.watchlist].forEach(m => {
-        if (m.genre_ids) m.genre_ids.forEach(id => categories.add(id));
-    });
 
-    const categoryOptions = '<option value="all">Tüm Kategoriler</option>' +
-        Array.from(categories)
-            .sort((a, b) => (state.genres[a] || '').localeCompare(state.genres[b] || ''))
-            .map(id => `<option value="${id}">${state.genres[id] || 'Bilinmeyen'}</option>`)
-            .join('');
-
-    watchedCategoryFilter.innerHTML = categoryOptions;
-    watchlistCategoryFilter.innerHTML = categoryOptions;
-}
 
 // --- Action Functions ---
 function removeCardFromSearch(id) {
@@ -553,9 +517,17 @@ window.addToWatchlist = (movie) => {
     removeCardFromSearch(movie.id);
 };
 
-window.openRatingModal = (id, movie) => {
-    movieToRate = movie;
-    ratingOverlay.classList.add('active');
+window.addToWatched = (movie) => {
+    if (state.watched.find(m => m.id === movie.id)) {
+        alert('Bu zaten izlediğiniz filmler listenizde!');
+        return;
+    }
+    // Remove from watchlist if exists
+    state.watchlist = state.watchlist.filter(m => m.id !== movie.id);
+    state.watched.push(movie);
+    saveState();
+    renderLists();
+    removeCardFromSearch(movie.id);
 };
 
 window.removeFromWatched = (id) => {
@@ -601,37 +573,9 @@ function setupEventListeners() {
     // Settings
     if (typeof settingsBtn !== 'undefined' && settingsBtn) settingsBtn.style.display = 'flex';
 
-    // Rating
-    if (typeof rateBtns !== 'undefined' && rateBtns) {
-        rateBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const rating = btn.getAttribute('data-rating');
-                if (movieToRate) {
-                    state.watchlist = state.watchlist.filter(m => m.id !== movieToRate.id);
-                    movieToRate.userRating = rating;
-                    state.watched.push(movieToRate);
-                    const movieIdToRemove = movieToRate.id;
-                    saveState();
-                    renderLists();
-                    removeCardFromSearch(movieIdToRemove);
-                    if (ratingOverlay) ratingOverlay.classList.remove('active');
-                    movieToRate = null;
-                }
-            });
-        });
-    }
-
-    if (typeof cancelRatingBtn !== 'undefined' && cancelRatingBtn) {
-        cancelRatingBtn.addEventListener('click', () => {
-            if (typeof ratingOverlay !== 'undefined' && ratingOverlay) ratingOverlay.classList.remove('active');
-            movieToRate = null;
-        });
-    }
-
     // Filters
-    if (typeof watchedCategoryFilter !== 'undefined' && watchedCategoryFilter) watchedCategoryFilter.addEventListener('change', renderLists);
-    if (typeof watchedRatingFilter !== 'undefined' && watchedRatingFilter) watchedRatingFilter.addEventListener('change', renderLists);
     if (typeof watchedSearch !== 'undefined' && watchedSearch) watchedSearch.addEventListener('input', renderLists);
+    if (typeof watchlistSearch !== 'undefined' && watchlistSearch) watchlistSearch.addEventListener('input', renderLists);
 
     // Backup & Restore
     if (typeof backupBtn !== 'undefined' && backupBtn) backupBtn.addEventListener('click', downloadData);

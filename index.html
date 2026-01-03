@@ -69,15 +69,6 @@
                         <i class="fas fa-search"></i>
                         <input type="text" id="watchedSearch" placeholder="Listede ara..." class="list-search-input">
                     </div>
-                    <select id="watchedCategoryFilter">
-                        <option value="all">Tüm Kategoriler</option>
-                    </select>
-                    <select id="watchedRatingFilter">
-                        <option value="all">Tüm Puanlar</option>
-                        <option value="good">İyi 😍</option>
-                        <option value="meh">Eh İşte 😐</option>
-                        <option value="bad">Kötü 💩</option>
-                    </select>
                 </div>
             </div>
             <div id="watchedList" class="movie-grid">
@@ -94,9 +85,6 @@
                         <i class="fas fa-search"></i>
                         <input type="text" id="watchlistSearch" placeholder="Listede ara..." class="list-search-input">
                     </div>
-                    <select id="watchlistCategoryFilter">
-                        <option value="all">Tüm Kategoriler</option>
-                    </select>
                 </div>
             </div>
             <div id="watchlist" class="movie-grid">
@@ -132,27 +120,7 @@
         </div>
     </div>
 
-    <!-- Rating Selection Popover (Hidden initially) -->
-    <div id="ratingOverlay" class="overlay">
-        <div class="rating-modal glass">
-            <h3>Nasıl Buldunuz?</h3>
-            <div class="rating-options">
-                <button class="rate-btn good" data-rating="good">
-                    <span class="emoji">😍</span>
-                    <span>İyi</span>
-                </button>
-                <button class="rate-btn meh" data-rating="meh">
-                    <span class="emoji">😐</span>
-                    <span>Eh İşte</span>
-                </button>
-                <button class="rate-btn bad" data-rating="bad">
-                    <span class="emoji">💩</span>
-                    <span>Kötü</span>
-                </button>
-            </div>
-            <button id="cancelRating" class="text-btn">Vazgeç</button>
-        </div>
-    </div>
+
 
     <script src="script.js"></script>
 </body>
