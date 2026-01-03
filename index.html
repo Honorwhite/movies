@@ -23,11 +23,24 @@
         <div class="logo">
             <i class="fas fa-clapperboard"></i>
             <span>CineTrack</span>
+            <div id="syncStatus" class="sync-status">
+                <i class="fas fa-cloud"></i>
+                <span>Senkronize ediliyor...</span>
+            </div>
         </div>
         <div class="nav-links">
             <button class="nav-btn active" data-view="search">Arama</button>
             <button class="nav-btn" data-view="watched">İzlediklerim</button>
             <button class="nav-btn" data-view="watchlist">İzlenecekler</button>
+            <div class="backup-controls">
+                <button id="backupBtn" class="nav-btn secondary-nav-btn" title="Verileri Yedekle (.json)">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button id="restoreBtn" class="nav-btn secondary-nav-btn" title="Yedekten Geri Yükle">
+                    <i class="fas fa-upload"></i>
+                </button>
+                <input type="file" id="restoreFile" style="display: none;" accept=".json">
+            </div>
         </div>
         <div class="settings-trigger">
             <button id="settingsBtn" title="Ayarlar"><i class="fas fa-cog"></i></button>

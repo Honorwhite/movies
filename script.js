@@ -1,6 +1,9 @@
 const TMDB_API_KEY = '4a9f3fe6b13e66b0dd355b7318b7e0e4';
-const PANTRY_ID = '3372c0c7-d867-4638-9993-4fc64379e43c'; // Gerçek ve benzersiz bir Pantry ID
-const BASE_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket`;
+const PANTRY_ID = '8b4f1234-a67b-4d56-b8c9-0e1f2a3b4c5d';
+const CLOUD_URL = `https://getpantry.cloud/apiv1/pantry/${PANTRY_ID}/basket/movieData`;
+const LOCAL_URL = 'http://localhost:3000/data';
+
+let isLocalServerAvailable = false;
 
 let state = {
     watched: [],
@@ -26,9 +29,11 @@ const rateBtns = document.querySelectorAll('.rate-btn');
 
 const watchedCategoryFilter = document.getElementById('watchedCategoryFilter');
 const watchedRatingFilter = document.getElementById('watchedRatingFilter');
-const watchedSearch = document.getElementById('watchedSearch');
-const watchlistCategoryFilter = document.getElementById('watchlistCategoryFilter');
 const watchlistSearch = document.getElementById('watchlistSearch');
+const syncStatus = document.getElementById('syncStatus');
+const backupBtn = document.getElementById('backupBtn');
+const restoreBtn = document.getElementById('restoreBtn');
+const restoreFile = document.getElementById('restoreFile');
 
 let movieToRate = null;
 
@@ -36,71 +41,180 @@ let movieToRate = null;
 async function init() {
     setupEventListeners();
     await fetchGenres();
+    await checkLocalServer();
     await loadStateFromCloud();
-    updateFeaturedCarousel();
     renderLists();
 }
 
+async function checkLocalServer() {
+    try {
+        const response = await fetch(LOCAL_URL, { method: 'GET' });
+        isLocalServerAvailable = response.ok;
+        if (isLocalServerAvailable) {
+            console.log('Yerel sunucu (server.js) aktif. Veriler movies.json dosyasına kaydedilecek.');
+        }
+    } catch (e) {
+        isLocalServerAvailable = false;
+        console.log('Yerel sunucu aktif değil. Bulut yedekleme kullanılacak.');
+    }
+}
+
 // --- Cloud Storage Functions (Pantry) ---
+function updateSyncUI(message, type = 'active') {
+    if (!syncStatus) return;
+    const span = syncStatus.querySelector('span');
+    const icon = syncStatus.querySelector('i');
+
+    span.textContent = message;
+    syncStatus.className = `sync-status ${type}`;
+
+    if (type === 'error') {
+        icon.className = 'fas fa-exclamation-triangle';
+    } else {
+        icon.className = 'fas fa-cloud';
+    }
+
+    if (type === 'active' || type === 'error') {
+        syncStatus.classList.add('active');
+    } else {
+        setTimeout(() => syncStatus.classList.remove('active'), 2000);
+    }
+}
+
 async function loadStateFromCloud() {
-    // Önce LocalStorage'dan yükle (Hızlı başlangıç ve yedek)
+    updateSyncUI('Eşitleniyor...', 'active');
+
     const localWatched = JSON.parse(localStorage.getItem('watched_list')) || [];
     const localWatchlist = JSON.parse(localStorage.getItem('watchlist_list')) || [];
 
     state.watched = localWatched;
     state.watchlist = localWatchlist;
 
+    const targetUrl = isLocalServerAvailable ? LOCAL_URL : CLOUD_URL;
+
     try {
-        console.log('Buluttan veriler çekiliyor...');
-        const response = await fetch(`${BASE_URL}/movieData`);
+        const response = await fetch(targetUrl);
 
         if (response.ok) {
-            const cloudData = await response.json();
-            // Bulut verisi varsa LocalStorage'dan daha güncel kabul et
-            if (cloudData.watched || cloudData.watchlist) {
-                state.watched = cloudData.watched || [];
-                state.watchlist = cloudData.watchlist || [];
-                // LocalStorage'ı da güncelle
-                localStorage.setItem('watched_list', JSON.stringify(state.watched));
-                localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
-                console.log('Veriler buluttan başarıyla senkronize edildi.');
-            }
-        } else if (response.status === 404) {
-            // Eğer bulutta hiç veri yoksa ama yerelde varsa, yereli buluta yükle
+            const remoteData = await response.json();
+            // Data Merging
+            state.watched = mergeMovieLists(localWatched, remoteData.watched || []);
+            state.watchlist = mergeMovieLists(localWatchlist, remoteData.watchlist || []);
+
+            saveStateToLocal();
+            // sync back if needed
+            await saveStateToCloudBase(false);
+            updateSyncUI(isLocalServerAvailable ? 'Dosya Senkronize' : 'Bulut Güncel', 'success');
+        } else if (response.status === 404 || response.status === 400) {
             if (state.watched.length > 0 || state.watchlist.length > 0) {
-                console.log('Bulutta veri yok, yerel veriler yükleniyor...');
-                await saveStateToCloud();
+                await saveStateToCloudBase();
+            } else {
+                updateSyncUI('Hazır', 'success');
             }
         }
     } catch (error) {
-        console.error('Bulut senkronizasyon hatası (Çevrimdışı mod):', error);
-        // Hata durumunda yerel verilerle devam et (zaten yukarıda set etmiştik)
+        console.error('Senkronizasyon hatası:', error);
+        updateSyncUI('Bağlantı Hatası', 'error');
     }
+
+    renderLists();
+    updateFeaturedCarousel();
 }
 
-async function saveStateToCloud() {
-    // Her zaman önce yerel olarak kaydet
+// İki listeyi ID bazlı birleştirir, aynı film varsa son veriyi tutar
+function mergeMovieLists(list1, list2) {
+    const combinedMap = new Map();
+    list1.forEach(m => combinedMap.set(m.id, m));
+    list2.forEach(m => combinedMap.set(m.id, m));
+    return Array.from(combinedMap.values());
+}
+
+function saveStateToLocal() {
     localStorage.setItem('watched_list', JSON.stringify(state.watched));
     localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
+}
+
+// Sadece buluta/dosyaya kaydeder
+async function saveStateToCloudBase(showUI = true) {
+    if (showUI) updateSyncUI('Kaydediliyor...', 'active');
+
+    const targetUrl = isLocalServerAvailable ? LOCAL_URL : CLOUD_URL;
 
     try {
-        const response = await fetch(`${BASE_URL}/movieData`, {
+        const response = await fetch(targetUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 watched: state.watched,
-                watchlist: state.watchlist
+                watchlist: state.watchlist,
+                lastUpdated: new Date().getTime()
             })
         });
-
-        if (response.ok) {
-            console.log('Veriler buluta başarıyla kaydedildi.');
-        } else {
-            console.error('Bulut kaydetme hatası (Status):', response.status);
+        if (showUI) {
+            if (response.ok) updateSyncUI(isLocalServerAvailable ? 'Dosyaya Kaydedildi' : 'Buluta Kaydedildi', 'success');
+            else updateSyncUI('Hata Oluştu', 'error');
         }
+        return response.ok;
     } catch (error) {
-        console.error('Bulut kaydetme hatası (Network):', error);
+        console.error('Kayıt hatası:', error);
+        if (showUI) updateSyncUI('Hata Oluştu', 'error');
+        return false;
     }
+}
+
+async function saveState() {
+    saveStateToLocal();
+    updateFilterOptions();
+    updateFeaturedCarousel();
+    await saveStateToCloudBase();
+}
+
+// --- Backup & Restore Functions ---
+function downloadData() {
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cinetrack_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    updateSyncUI('Yedek İndirildi', 'success');
+}
+
+function handleRestore(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const importedState = JSON.parse(e.target.result);
+            if (importedState.watched && importedState.watchlist) {
+                if (confirm('Veriler geri yüklenecek. Mevcut listenizle birleştirilsin mi? (İptal derseniz tamamen yer değiştirir)')) {
+                    state.watched = mergeMovieLists(state.watched, importedState.watched);
+                    state.watchlist = mergeMovieLists(state.watchlist, importedState.watchlist);
+                } else {
+                    state.watched = importedState.watched;
+                    state.watchlist = importedState.watchlist;
+                }
+
+                await saveState();
+                renderLists();
+                updateFeaturedCarousel();
+                alert('Yedek başarıyla yüklendi!');
+            } else {
+                alert('Geçersiz yedek dosyası.');
+            }
+        } catch (err) {
+            console.error('Yükleme hatası:', err);
+            alert('Dosya okunurken bir hata oluştu.');
+        }
+    };
+    reader.readAsText(file);
+    restoreFile.value = ''; // Reset input
 }
 
 // --- API Functions ---
@@ -323,12 +437,6 @@ window.removeFromWatchlist = (id) => {
     renderLists();
 };
 
-function saveState() {
-    saveStateToCloud();
-    updateFilterOptions();
-    updateFeaturedCarousel();
-}
-
 // --- Event Listeners ---
 function setupEventListeners() {
     // Navigation
@@ -385,8 +493,10 @@ function setupEventListeners() {
     watchedCategoryFilter.addEventListener('change', renderLists);
     watchedRatingFilter.addEventListener('change', renderLists);
     watchedSearch.addEventListener('input', renderLists);
-    watchlistCategoryFilter.addEventListener('change', renderLists);
-    watchlistSearch.addEventListener('input', renderLists);
+    // Backup & Restore
+    backupBtn.addEventListener('click', downloadData);
+    restoreBtn.addEventListener('click', () => restoreFile.click());
+    restoreFile.addEventListener('change', handleRestore);
 }
 
 // Run Init
