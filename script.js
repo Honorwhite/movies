@@ -402,7 +402,7 @@ function createMovieCard(movie, context) {
     }
 
     const removeBtnHtml = (context === 'watched' || context === 'watchlist') ? `
-        <button class="action-btn remove-btn" onclick="${context === 'watched' ? `removeFromWatched(${movie.id})` : `removeFromWatchlist(${movie.id})`}" title="Listeden Kaldır">
+        <button class="action-btn remove-btn" onclick="event.stopPropagation(); ${context === 'watched' ? `removeFromWatched(${movie.id})` : `removeFromWatchlist(${movie.id})`}" title="Listeden Kaldır">
             <i class="fas fa-times"></i>
         </button>
     ` : '';
