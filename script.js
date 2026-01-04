@@ -44,7 +44,21 @@ const restoreBtn = document.getElementById('restoreBtn');
 const restoreFile = document.getElementById('restoreFile');
 const watchedSearch = document.getElementById('watchedSearch');
 
+// Recommended Movies Elements
+const recommendedSection = document.getElementById('recommendedSection');
+const recommendedMovies = document.getElementById('recommendedMovies');
+const loadingIndicator = document.getElementById('loadingIndicator');
+
 let movieToRate = null;
+
+// Recommended Movies State
+let recommendedState = {
+    page: 1,
+    isLoading: false,
+    hasMore: true,
+    loadedMovies: []
+};
+
 
 // --- Initialization ---
 async function init() {
@@ -57,7 +71,11 @@ async function init() {
 
     await loadStateFromCloud();
     renderLists();
+
+    // Load initial recommended movies
+    loadRecommendedMovies();
 }
+
 
 async function checkLocalServer() {
     try {
@@ -349,6 +367,102 @@ async function searchMovies(query) {
     }
 }
 
+// --- Recommended Movies Functions ---
+async function loadRecommendedMovies() {
+    if (recommendedState.isLoading || !recommendedState.hasMore) return;
+
+    recommendedState.isLoading = true;
+    loadingIndicator.classList.add('active');
+
+    try {
+        // Fetch both popular and top rated movies
+        const [popularResponse, topRatedResponse] = await Promise.all([
+            fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
+            fetch(`https://api.themoviedb.org/3/movie/top_rated?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`)
+        ]);
+
+        const popularData = await popularResponse.json();
+        const topRatedData = await topRatedResponse.json();
+
+        // Combine and filter movies
+        let allMovies = [...popularData.results, ...topRatedData.results];
+
+        // Remove duplicates based on ID
+        const uniqueMovies = Array.from(new Map(allMovies.map(m => [m.id, m])).values());
+
+        // Filter out movies already in user's lists and already loaded
+        const filteredMovies = uniqueMovies.filter(movie => {
+            const isInWatched = state.watched.some(m => m.id === movie.id);
+            const isInWatchlist = state.watchlist.some(m => m.id === movie.id);
+            const isAlreadyLoaded = recommendedState.loadedMovies.some(m => m.id === movie.id);
+            const hasValidPoster = movie.poster_path;
+            const isHighRated = movie.vote_average >= 6.5; // Only show well-rated movies
+            const isRecent = movie.release_date && new Date(movie.release_date).getFullYear() >= 2015; // Recent movies
+
+            return !isInWatched && !isInWatchlist && !isAlreadyLoaded && hasValidPoster && isHighRated && isRecent;
+        });
+
+        // Sort by rating and recency
+        filteredMovies.sort((a, b) => {
+            const ratingDiff = b.vote_average - a.vote_average;
+            if (Math.abs(ratingDiff) > 0.5) return ratingDiff;
+
+            const dateA = new Date(a.release_date || '2000-01-01');
+            const dateB = new Date(b.release_date || '2000-01-01');
+            return dateB - dateA;
+        });
+
+        // Take top movies
+        const moviesToShow = filteredMovies.slice(0, 12);
+
+        if (moviesToShow.length === 0) {
+            recommendedState.hasMore = false;
+            loadingIndicator.classList.remove('active');
+            return;
+        }
+
+        // Add to loaded movies
+        recommendedState.loadedMovies.push(...moviesToShow);
+
+        // Render movies
+        moviesToShow.forEach(movie => {
+            const card = createMovieCard(movie, 'recommended');
+            recommendedMovies.appendChild(card);
+        });
+
+        recommendedState.page++;
+
+    } catch (error) {
+        console.error('Error loading recommended movies:', error);
+    } finally {
+        recommendedState.isLoading = false;
+        loadingIndicator.classList.remove('active');
+    }
+}
+
+function setupInfiniteScroll() {
+    let scrollTimeout;
+
+    window.addEventListener('scroll', () => {
+        clearTimeout(scrollTimeout);
+
+        scrollTimeout = setTimeout(() => {
+            // Check if user is in search view
+            const searchView = document.getElementById('searchView');
+            if (!searchView || !searchView.classList.contains('active')) return;
+
+            // Check if near bottom of page
+            const scrollPosition = window.innerHeight + window.scrollY;
+            const pageHeight = document.documentElement.scrollHeight;
+
+            if (scrollPosition >= pageHeight - 1000) {
+                loadRecommendedMovies();
+            }
+        }, 100);
+    });
+}
+
+
 function updateFeaturedCarousel() {
     if (!carouselTrack) return;
 
@@ -440,7 +554,7 @@ function createMovieCard(movie, context) {
             </div>
         </div>
         <div class="card-actions">
-            ${context === 'search' ? `
+            ${context === 'search' || context === 'recommended' ? `
                 <button class="action-btn watched-btn ${isWatched ? 'is-added' : ''}" 
                         onclick="${isWatched ? '' : `addToWatched(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
                     <i class="fas fa-check"></i> <span>${isWatched ? 'İzlendi' : 'İzledim'}</span>
@@ -506,6 +620,20 @@ function removeCardFromSearch(id) {
     }
 }
 
+function removeCardFromRecommended(id) {
+    const card = recommendedMovies.querySelector(`.movie-card[data-id="${id}"][data-context="recommended"]`);
+    if (card) {
+        card.style.opacity = '0';
+        card.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            if (card.parentNode === recommendedMovies) {
+                recommendedMovies.removeChild(card);
+            }
+        }, 300);
+    }
+}
+
+
 window.addToWatchlist = (movie) => {
     if (state.watchlist.find(m => m.id === movie.id)) {
         alert('Bu zaten izlenecekler listenizde!');
@@ -515,6 +643,7 @@ window.addToWatchlist = (movie) => {
     saveState();
     renderLists();
     removeCardFromSearch(movie.id);
+    removeCardFromRecommended(movie.id);
 };
 
 window.addToWatched = (movie) => {
@@ -528,6 +657,7 @@ window.addToWatched = (movie) => {
     saveState();
     renderLists();
     removeCardFromSearch(movie.id);
+    removeCardFromRecommended(movie.id);
 };
 
 window.removeFromWatched = (id) => {
@@ -613,7 +743,11 @@ function setupEventListeners() {
             await loadStateFromCloud();
         });
     }
+
+    // Setup infinite scroll for recommended movies
+    setupInfiniteScroll();
 }
+
 
 // Run Init
 init();
