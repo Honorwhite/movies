@@ -61,7 +61,17 @@ let recommendedState = {
     selectedGenre: null
 };
 
+let watchedListState = {
+    selectedGenre: null
+};
+
+let watchlistSectionState = {
+    selectedGenre: null
+};
+
 const genreChips = document.getElementById('genreChips');
+const watchedGenreChips = document.getElementById('watchedGenreChips');
+const watchlistGenreChips = document.getElementById('watchlistGenreChips');
 
 
 // --- Initialization ---
@@ -405,37 +415,56 @@ async function initGenres() {
         const allGenres = [...mData.genres, ...tData.genres];
         const uniqueGenres = Array.from(new Map(allGenres.map(g => [g.id, g])).values());
 
-        renderGenreChips(uniqueGenres);
+        renderGenreChips(uniqueGenres, genreChips, (genreId, chip) => selectGenre(genreId, chip));
+        renderGenreChips(uniqueGenres, watchedGenreChips, (genreId, chip) => selectGenreForList('watched', genreId, chip));
+        renderGenreChips(uniqueGenres, watchlistGenreChips, (genreId, chip) => selectGenreForList('watchlist', genreId, chip));
     } catch (error) {
         console.error('Error fetching genres:', error);
     }
 }
 
-function renderGenreChips(genres) {
-    if (!genreChips) return;
-    genreChips.innerHTML = '';
+function renderGenreChips(genres, container, onSelect) {
+    if (!container) return;
+    container.innerHTML = '';
 
     // Add "All" chip
     const allChip = document.createElement('div');
     allChip.className = 'genre-chip active';
     allChip.textContent = 'Hepsi';
-    allChip.onclick = () => selectGenre(null, allChip);
-    genreChips.appendChild(allChip);
+    allChip.onclick = () => onSelect(null, allChip);
+    container.appendChild(allChip);
 
     genres.slice(0, 15).forEach(genre => {
         const chip = document.createElement('div');
         chip.className = 'genre-chip';
         chip.textContent = genre.name;
-        chip.onclick = () => selectGenre(genre.id, chip);
-        genreChips.appendChild(chip);
+        chip.onclick = () => onSelect(genre.id, chip);
+        container.appendChild(chip);
     });
+}
+
+function selectGenreForList(listType, genreId, chipElement) {
+    const container = listType === 'watched' ? watchedGenreChips : watchlistGenreChips;
+    const currentState = listType === 'watched' ? watchedListState : watchlistSectionState;
+
+    if (currentState.selectedGenre === genreId) return;
+
+    // Update UI in that specific container
+    container.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
+    chipElement.classList.add('active');
+
+    // Update state
+    currentState.selectedGenre = genreId;
+
+    // Re-render the specific list
+    renderLists();
 }
 
 function selectGenre(genreId, chipElement) {
     if (recommendedState.selectedGenre === genreId) return;
 
-    // Update UI
-    document.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
+    // Update UI - only for chips in the recommended section
+    genreChips.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
     chipElement.classList.add('active');
 
     // Update state and reload
@@ -601,6 +630,9 @@ function renderSearchResults(movies) {
     // Filter out items without posters or those that aren't movie/tv
     const filtered = movies.filter(m => (m.media_type === 'movie' || m.media_type === 'tv') && m.poster_path);
 
+    // Sort by popularity descending
+    filtered.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+
     if (filtered.length === 0) {
         searchResults.innerHTML = '<p class="no-results">Sonuç bulunamadı.</p>';
         return;
@@ -678,9 +710,15 @@ function createMovieCard(movie, context) {
     return card;
 }
 
+// --- Sorting State ---
+let sortState = {
+    watched: 'abc', // 'abc', 'year', 'rating'
+    watchlist: 'abc'
+};
+
 function renderLists() {
     // Render Watched List
-    const watchedFiltered = filterList(state.watched, watchedSearch.value);
+    const watchedFiltered = filterList(state.watched, watchedSearch.value, watchedListState.selectedGenre, sortState.watched);
     watchedList.innerHTML = '';
     watchedFiltered.forEach(movie => watchedList.appendChild(createMovieCard(movie, 'watched')));
     if (watchedFiltered.length === 0) {
@@ -688,7 +726,7 @@ function renderLists() {
     }
 
     // Render Watchlist
-    const watchlistFiltered = filterList(state.watchlist, watchlistSearch.value);
+    const watchlistFiltered = filterList(state.watchlist, watchlistSearch.value, watchlistSectionState.selectedGenre, sortState.watchlist);
     watchlistContainer.innerHTML = '';
     watchlistFiltered.forEach(movie => watchlistContainer.appendChild(createMovieCard(movie, 'watchlist')));
     if (watchlistFiltered.length === 0) {
@@ -696,11 +734,29 @@ function renderLists() {
     }
 }
 
-function filterList(list, searchQuery) {
-    return list.filter(m => {
+function filterList(list, searchQuery, genreId, sortType = 'abc') {
+    const filtered = list.filter(m => {
         const title = (m.title || m.name || '').toLowerCase();
         const searchMatch = !searchQuery || title.includes(searchQuery.toLowerCase());
-        return searchMatch;
+        const genreMatch = !genreId || (m.genre_ids && m.genre_ids.includes(genreId));
+        return searchMatch && genreMatch;
+    });
+
+    return filtered.sort((a, b) => {
+        if (sortType === 'abc') {
+            const titleA = (a.title || a.name || '').toLowerCase();
+            const titleB = (b.title || b.name || '').toLowerCase();
+            return titleA.localeCompare(titleB, 'tr');
+        } else if (sortType === 'year') {
+            const yearA = parseInt((a.release_date || a.first_air_date || '0').split('-')[0]);
+            const yearB = parseInt((b.release_date || b.first_air_date || '0').split('-')[0]);
+            return yearB - yearA; // Newest first
+        } else if (sortType === 'rating') {
+            const rateA = a.vote_average || 0;
+            const rateB = b.vote_average || 0;
+            return rateB - rateA; // Highest first
+        }
+        return 0;
     });
 }
 
@@ -826,7 +882,22 @@ function setupEventListeners() {
     }
     if (typeof restoreFile !== 'undefined' && restoreFile) restoreFile.addEventListener('change', handleRestore);
 
-    // Settings Modal
+    // Sort Buttons
+    document.querySelectorAll('.sort-controls .sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const listType = btn.parentElement.getAttribute('data-list');
+            const sortType = btn.getAttribute('data-sort');
+
+            // Update UI
+            btn.parentElement.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            // Update State
+            sortState[listType] = sortType;
+            renderLists();
+        });
+    });
+
     if (typeof settingsBtn !== 'undefined' && settingsBtn) {
         settingsBtn.addEventListener('click', () => {
             if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.add('active');

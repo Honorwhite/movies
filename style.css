@@ -317,7 +317,7 @@ body {
 .carousel-track {
     display: flex;
     gap: 1.5rem;
-    animation: scroll 40s linear infinite;
+    animation: scroll 400s linear infinite;
     width: max-content;
 }
 
@@ -707,7 +707,42 @@ body {
 
 .filters {
     display: flex;
-    gap: 10px;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.sort-controls {
+    display: flex;
+    background: var(--glass-bg);
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+}
+
+.sort-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+}
+
+.sort-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sort-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
 

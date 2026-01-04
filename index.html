@@ -100,10 +100,23 @@
             <div class="view-header">
                 <h2>İzlediklerim</h2>
                 <div class="filters">
+                    <div class="sort-controls" data-list="watched">
+                        <button class="sort-btn active" data-sort="abc" title="Alfabetik"><i
+                                class="fas fa-sort-alpha-down"></i></button>
+                        <button class="sort-btn" data-sort="year" title="Yıla Göre"><i
+                                class="fas fa-calendar-alt"></i></button>
+                        <button class="sort-btn" data-sort="rating" title="Puana Göre"><i
+                                class="fas fa-star"></i></button>
+                    </div>
                     <div class="list-search-wrapper">
                         <i class="fas fa-search"></i>
                         <input type="text" id="watchedSearch" placeholder="Listede ara..." class="list-search-input">
                     </div>
+                </div>
+            </div>
+            <div class="categories-container">
+                <div id="watchedGenreChips" class="genre-chips">
+                    <!-- Genre chips will be injected here -->
                 </div>
             </div>
             <div id="watchedList" class="movie-grid">
@@ -116,10 +129,23 @@
             <div class="view-header">
                 <h2>İzlenecekler</h2>
                 <div class="filters">
+                    <div class="sort-controls" data-list="watchlist">
+                        <button class="sort-btn active" data-sort="abc" title="Alfabetik"><i
+                                class="fas fa-sort-alpha-down"></i></button>
+                        <button class="sort-btn" data-sort="year" title="Yıla Göre"><i
+                                class="fas fa-calendar-alt"></i></button>
+                        <button class="sort-btn" data-sort="rating" title="Puana Göre"><i
+                                class="fas fa-star"></i></button>
+                    </div>
                     <div class="list-search-wrapper">
                         <i class="fas fa-search"></i>
                         <input type="text" id="watchlistSearch" placeholder="Listede ara..." class="list-search-input">
                     </div>
+                </div>
+            </div>
+            <div class="categories-container">
+                <div id="watchlistGenreChips" class="genre-chips">
+                    <!-- Genre chips will be injected here -->
                 </div>
             </div>
             <div id="watchlist" class="movie-grid">
