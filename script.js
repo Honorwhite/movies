@@ -57,8 +57,11 @@ let recommendedState = {
     page: 1,
     isLoading: false,
     hasMore: true,
-    loadedMovies: []
+    loadedMovies: [],
+    selectedGenre: null
 };
+
+const genreChips = document.getElementById('genreChips');
 
 
 // --- Initialization ---
@@ -73,7 +76,8 @@ async function init() {
     await loadStateFromCloud();
     renderLists();
 
-    // Load initial recommended movies
+    // Load chips and initial recommended movies
+    initGenres();
     loadRecommendedMovies();
 }
 
@@ -377,7 +381,64 @@ async function searchMovies(query) {
     }
 }
 
-// --- Recommended Movies Functions ---
+// --- Recommended Movies & Categories ---
+async function initGenres() {
+    try {
+        const [movieGenres, tvGenres] = await Promise.all([
+            fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=tr-TR`),
+            fetch(`https://api.themoviedb.org/3/genre/tv/list?api_key=${TMDB_API_KEY}&language=tr-TR`)
+        ]);
+
+        const mData = await movieGenres.json();
+        const tData = await tvGenres.json();
+
+        // Combine and remove duplicates
+        const allGenres = [...mData.genres, ...tData.genres];
+        const uniqueGenres = Array.from(new Map(allGenres.map(g => [g.id, g])).values());
+
+        renderGenreChips(uniqueGenres);
+    } catch (error) {
+        console.error('Error fetching genres:', error);
+    }
+}
+
+function renderGenreChips(genres) {
+    if (!genreChips) return;
+    genreChips.innerHTML = '';
+
+    // Add "All" chip
+    const allChip = document.createElement('div');
+    allChip.className = 'genre-chip active';
+    allChip.textContent = 'Hepsi';
+    allChip.onclick = () => selectGenre(null, allChip);
+    genreChips.appendChild(allChip);
+
+    genres.slice(0, 15).forEach(genre => {
+        const chip = document.createElement('div');
+        chip.className = 'genre-chip';
+        chip.textContent = genre.name;
+        chip.onclick = () => selectGenre(genre.id, chip);
+        genreChips.appendChild(chip);
+    });
+}
+
+function selectGenre(genreId, chipElement) {
+    if (recommendedState.selectedGenre === genreId) return;
+
+    // Update UI
+    document.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
+    chipElement.classList.add('active');
+
+    // Update state and reload
+    recommendedState.selectedGenre = genreId;
+    recommendedState.page = 1;
+    recommendedState.loadedMovies = [];
+    recommendedState.hasMore = true;
+    recommendedMovies.innerHTML = '';
+
+    loadRecommendedMovies();
+}
+
 async function loadRecommendedMovies() {
     if (recommendedState.isLoading || !recommendedState.hasMore) return;
 
@@ -385,26 +446,26 @@ async function loadRecommendedMovies() {
     loadingIndicator.classList.add('active');
 
     try {
+        const genreParam = recommendedState.selectedGenre ? `&with_genres=${recommendedState.selectedGenre}` : '';
+
         // Fetch popular/top_rated for both movies and tv
-        const [popMovies, topMovies, popTv, topTv] = await Promise.all([
-            fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
-            fetch(`https://api.themoviedb.org/3/movie/top_rated?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
-            fetch(`https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
-            fetch(`https://api.themoviedb.org/3/tv/top_rated?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`)
+        const baseURL = `https://api.themoviedb.org/3/discover`;
+        const commonParams = `api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}&sort_by=popularity.desc${genreParam}`;
+
+        const [moviesRes, tvRes] = await Promise.all([
+            fetch(`${baseURL}/movie?${commonParams}`),
+            fetch(`${baseURL}/tv?${commonParams}`)
         ]);
 
         const dataArr = await Promise.all([
-            popMovies.json(), topMovies.json(), popTv.json(), topTv.json()
+            moviesRes.json(), tvRes.json()
         ]);
 
-        // Tag the results correctly since results don't always have media_type
+        // Tag and combine
         dataArr[0].results.forEach(m => m.media_type = 'movie');
-        dataArr[1].results.forEach(m => m.media_type = 'movie');
-        dataArr[2].results.forEach(m => m.media_type = 'tv');
-        dataArr[3].results.forEach(m => m.media_type = 'tv');
+        dataArr[1].results.forEach(m => m.media_type = 'tv');
 
-        // Combine all
-        let allItems = dataArr.flatMap(d => d.results);
+        let allItems = [...dataArr[0].results, ...dataArr[1].results];
 
         // Remove duplicates based on ID
         const uniqueItems = Array.from(new Map(allItems.map(m => [m.id, m])).values());

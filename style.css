@@ -384,6 +384,51 @@ body {
     border-radius: 2px;
 }
 
+.categories-container {
+    margin: 2rem 0;
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.categories-container::-webkit-scrollbar {
+    display: none;
+}
+
+.genre-chips {
+    display: flex;
+    gap: 12px;
+    padding: 0 1rem;
+}
+
+.genre-chip {
+    padding: 0.6rem 1.2rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 50px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+}
+
+.genre-chip:hover {
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+
+.genre-chip.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
 /* Loading Indicator */
 .loading-indicator {
     display: none;
