@@ -582,6 +582,17 @@ body {
     opacity: 0.9;
 }
 
+.ignore-btn {
+    background: #64748b20;
+    color: #64748b;
+    flex: 0 0 45px;
+}
+
+.ignore-btn:hover {
+    background: #475569;
+    color: white;
+}
+
 .action-btn.remove-btn:hover {
     background: #ff5f5f;
     transform: scale(1.1);

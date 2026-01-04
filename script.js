@@ -13,7 +13,8 @@ let state = {
     cloudSettings: {
         url: localStorage.getItem('supabase_url') || 'https://gbdqycgclxhblhhjhpbm.supabase.co',
         key: localStorage.getItem('supabase_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
-    }
+    },
+    ignored: []
 };
 
 // --- DOM Elements ---
@@ -125,10 +126,12 @@ async function loadStateFromCloud() {
 
     const localWatched = JSON.parse(localStorage.getItem('watched_list')) || [];
     const localWatchlist = JSON.parse(localStorage.getItem('watchlist_list')) || [];
+    const localIgnored = JSON.parse(localStorage.getItem('ignored_list')) || [];
     const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
 
     state.watched = localWatched;
     state.watchlist = localWatchlist;
+    state.ignored = localIgnored;
 
     console.log('Yerel veriler yüklendi. Zaman damgası:', localTimestamp);
 
@@ -143,6 +146,7 @@ async function loadStateFromCloud() {
                     console.log('Dosya verisi yerelden yeni, güncelleniyor.');
                     state.watched = remoteData.watched || [];
                     state.watchlist = remoteData.watchlist || [];
+                    state.ignored = remoteData.ignored || [];
                     saveStateToLocal(false);
                     updateSyncUI('Dosyadan Yüklendi', 'success');
                 } else if (remoteTimestamp < localTimestamp && localTimestamp > 0) {
@@ -177,6 +181,7 @@ async function loadStateFromCloud() {
                         console.log('Bulut verisi yerelden yeni, güncelleniyor.');
                         state.watched = cloudData.watched || [];
                         state.watchlist = cloudData.watchlist || [];
+                        state.ignored = cloudData.ignored || [];
                         saveStateToLocal(false);
                         updateSyncUI('Buluttan Alındı', 'success');
                     } else if (remoteTimestamp < localTimestamp && (localWatched.length > 0 || localWatchlist.length > 0)) {
@@ -228,6 +233,7 @@ function saveStateToLocal(updateTimestamp = true) {
     }
     localStorage.setItem('watched_list', JSON.stringify(state.watched));
     localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
+    localStorage.setItem('ignored_list', JSON.stringify(state.ignored));
     return now;
 }
 
@@ -243,6 +249,7 @@ async function saveStateToCloudBase(showUI = true) {
                 body: JSON.stringify({
                     watched: state.watched,
                     watchlist: state.watchlist,
+                    ignored: state.ignored,
                     lastUpdated: parseInt(localStorage.getItem('last_updated')) || new Date().getTime()
                 })
             });
@@ -271,6 +278,7 @@ async function saveStateToCloudBase(showUI = true) {
                     content: {
                         watched: state.watched,
                         watchlist: state.watchlist,
+                        ignored: state.ignored,
                         lastUpdated: parseInt(localStorage.getItem('last_updated')) || new Date().getTime()
                     }
                 })
@@ -326,9 +334,11 @@ function handleRestore(event) {
                 if (confirm('Veriler geri yüklenecek. Mevcut listenizle birleştirilsin mi? (İptal derseniz tamamen yer değiştirir)')) {
                     state.watched = mergeMovieLists(state.watched, importedState.watched);
                     state.watchlist = mergeMovieLists(state.watchlist, importedState.watchlist);
+                    state.ignored = mergeMovieLists(state.ignored || [], importedState.ignored || []);
                 } else {
                     state.watched = importedState.watched;
                     state.watchlist = importedState.watchlist;
+                    state.ignored = importedState.ignored || [];
                 }
 
                 await saveState();
@@ -375,65 +385,83 @@ async function loadRecommendedMovies() {
     loadingIndicator.classList.add('active');
 
     try {
-        // Fetch both popular and top rated movies
-        const [popularResponse, topRatedResponse] = await Promise.all([
+        // Fetch popular/top_rated for both movies and tv
+        const [popMovies, topMovies, popTv, topTv] = await Promise.all([
             fetch(`https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
-            fetch(`https://api.themoviedb.org/3/movie/top_rated?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`)
+            fetch(`https://api.themoviedb.org/3/movie/top_rated?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
+            fetch(`https://api.themoviedb.org/3/tv/popular?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`),
+            fetch(`https://api.themoviedb.org/3/tv/top_rated?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}`)
         ]);
 
-        const popularData = await popularResponse.json();
-        const topRatedData = await topRatedResponse.json();
+        const dataArr = await Promise.all([
+            popMovies.json(), topMovies.json(), popTv.json(), topTv.json()
+        ]);
 
-        // Combine and filter movies
-        let allMovies = [...popularData.results, ...topRatedData.results];
+        // Tag the results correctly since results don't always have media_type
+        dataArr[0].results.forEach(m => m.media_type = 'movie');
+        dataArr[1].results.forEach(m => m.media_type = 'movie');
+        dataArr[2].results.forEach(m => m.media_type = 'tv');
+        dataArr[3].results.forEach(m => m.media_type = 'tv');
+
+        // Combine all
+        let allItems = dataArr.flatMap(d => d.results);
 
         // Remove duplicates based on ID
-        const uniqueMovies = Array.from(new Map(allMovies.map(m => [m.id, m])).values());
+        const uniqueItems = Array.from(new Map(allItems.map(m => [m.id, m])).values());
 
-        // Filter out movies already in user's lists and already loaded
-        const filteredMovies = uniqueMovies.filter(movie => {
-            const isInWatched = state.watched.some(m => m.id === movie.id);
-            const isInWatchlist = state.watchlist.some(m => m.id === movie.id);
-            const isAlreadyLoaded = recommendedState.loadedMovies.some(m => m.id === movie.id);
-            const hasValidPoster = movie.poster_path;
-            const isHighRated = movie.vote_average >= 6.5; // Only show well-rated movies
-            const isRecent = movie.release_date && new Date(movie.release_date).getFullYear() >= 2015; // Recent movies
+        // Filter out items already in user's lists, ignored, and already loaded
+        const filteredItems = uniqueItems.filter(item => {
+            const isInWatched = state.watched.some(m => m.id === item.id);
+            const isInWatchlist = state.watchlist.some(m => m.id === item.id);
+            const isIgnored = state.ignored.some(m => m.id === item.id);
+            const isAlreadyLoaded = recommendedState.loadedMovies.some(m => m.id === item.id);
+            const hasValidPoster = item.poster_path;
+            const isHighRated = item.vote_average >= 6.5;
 
-            return !isInWatched && !isInWatchlist && !isAlreadyLoaded && hasValidPoster && isHighRated && isRecent;
+            const releaseDate = item.release_date || item.first_air_date;
+            const isRecent = releaseDate && new Date(releaseDate).getFullYear() >= 2015;
+
+            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isHighRated && isRecent;
         });
 
         // Sort by rating and recency
-        filteredMovies.sort((a, b) => {
+        filteredItems.sort((a, b) => {
             const ratingDiff = b.vote_average - a.vote_average;
             if (Math.abs(ratingDiff) > 0.5) return ratingDiff;
 
-            const dateA = new Date(a.release_date || '2000-01-01');
-            const dateB = new Date(b.release_date || '2000-01-01');
+            const dateA = new Date(a.release_date || a.first_air_date || '2000-01-01');
+            const dateB = new Date(b.release_date || b.first_air_date || '2000-01-01');
             return dateB - dateA;
         });
 
-        // Take top movies
-        const moviesToShow = filteredMovies.slice(0, 12);
+        // Take top items
+        const itemsToShow = filteredItems.slice(0, 12);
 
-        if (moviesToShow.length === 0) {
+        if (itemsToShow.length === 0) {
+            // If we have more pages but filtered everything out, try next page
+            if (recommendedState.page < 10) {
+                recommendedState.page++;
+                recommendedState.isLoading = false;
+                return loadRecommendedMovies();
+            }
             recommendedState.hasMore = false;
             loadingIndicator.classList.remove('active');
             return;
         }
 
         // Add to loaded movies
-        recommendedState.loadedMovies.push(...moviesToShow);
+        recommendedState.loadedMovies.push(...itemsToShow);
 
-        // Render movies
-        moviesToShow.forEach(movie => {
-            const card = createMovieCard(movie, 'recommended');
+        // Render items
+        itemsToShow.forEach(item => {
+            const card = createMovieCard(item, 'recommended');
             recommendedMovies.appendChild(card);
         });
 
         recommendedState.page++;
 
     } catch (error) {
-        console.error('Error loading recommended movies:', error);
+        console.error('Error loading recommended items:', error);
     } finally {
         recommendedState.isLoading = false;
         loadingIndicator.classList.remove('active');
@@ -563,6 +591,11 @@ function createMovieCard(movie, context) {
                         onclick="${isWatchlist ? '' : `addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
                     <i class="fas fa-plus"></i> <span>${isWatchlist ? 'Listede' : 'İzlenecek'}</span>
                 </button>
+                ${context === 'recommended' ? `
+                    <button class="action-btn ignore-btn" onclick="ignoreMovie(${JSON.stringify(movie).replace(/"/g, '&quot;')})" title="Gizle">
+                        <i class="fas fa-eye-slash"></i>
+                    </button>
+                ` : ''}
             ` : ''}
             
             ${context === 'watchlist' ? `
@@ -670,6 +703,13 @@ window.removeFromWatchlist = (id) => {
     state.watchlist = state.watchlist.filter(m => m.id !== id);
     saveState();
     renderLists();
+};
+
+window.ignoreMovie = (movie) => {
+    if (state.ignored.find(m => m.id === movie.id)) return;
+    state.ignored.push(movie);
+    saveState();
+    removeCardFromRecommended(movie.id);
 };
 
 // --- Event Listeners ---
