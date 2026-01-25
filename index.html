@@ -20,6 +20,22 @@
 </head>
 
 <body>
+    <div id="userSelectionOverlay" class="user-selection-overlay">
+        <div class="user-selection-content glass">
+            <h2>Kullanıcı Seçin</h2>
+            <div class="user-cards">
+                <div class="user-card" onclick="selectUser('onur')">
+                    <div class="user-avatar"><i class="fas fa-user-ninja"></i></div>
+                    <span>Onur</span>
+                </div>
+                <div class="user-card" onclick="selectUser('cemrik')">
+                    <div class="user-avatar"><i class="fas fa-user-astronaut"></i></div>
+                    <span>Cemrik</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="background-blobs">
         <div class="blob blob-1"></div>
         <div class="blob blob-2"></div>
@@ -47,6 +63,10 @@
             <button class="nav-btn" data-view="watchlist">
                 <i class="fas fa-bookmark"></i>
                 <span>İzlenecekler</span>
+            </button>
+            <button class="nav-btn user-profile-btn" onclick="switchUser()" title="Kullanıcı Değiştir">
+                <i class="fas fa-user-circle"></i>
+                <span id="activeUserName">Yükleniyor...</span>
             </button>
         </div>
     </nav>

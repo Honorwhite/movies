@@ -1,12 +1,15 @@
 const TMDB_API_KEY = '4a9f3fe6b13e66b0dd355b7318b7e0e4';
 const LOCAL_URL = 'http://localhost:3000/data';
 
+// Immediate check for saved user to prevent flicker
+if (localStorage.getItem('active_user')) {
+    document.documentElement.classList.add('user-logged-in');
+}
+
 let isLocalServerAvailable = false;
 
 let state = {
-    watched: [],
-    watchlist: [],
-    currentView: 'search',
+    currentUser: null,
     watched: [],
     watchlist: [],
     currentView: 'search',
@@ -81,6 +84,22 @@ async function init() {
     setupEventListeners();
     await checkLocalServer();
 
+    // Check for saved user session
+    const savedUser = localStorage.getItem('active_user');
+    if (savedUser && !state.currentUser) {
+        state.currentUser = savedUser;
+    }
+
+    if (!state.currentUser) {
+        document.getElementById('userSelectionOverlay').style.display = 'flex';
+        document.getElementById('userSelectionOverlay').style.opacity = '1';
+        return;
+    } else {
+        document.getElementById('userSelectionOverlay').style.display = 'none';
+        const nameSpan = document.getElementById('activeUserName');
+        if (nameSpan) nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
+    }
+
     // Fill settings inputs
     if (supabaseUrlInput) supabaseUrlInput.value = state.cloudSettings.url;
     if (supabaseKeyInput) supabaseKeyInput.value = state.cloudSettings.key;
@@ -101,6 +120,42 @@ async function init() {
         });
     }
 }
+
+window.selectUser = async (username) => {
+    state.currentUser = username;
+    localStorage.setItem('active_user', username);
+
+    // Migrate old data for Onur if it exists and new format doesn't
+    if (username === 'onur' && !localStorage.getItem('user_onur_watched_list')) {
+        const oldWatched = localStorage.getItem('watched_list');
+        const oldWatchlist = localStorage.getItem('watchlist_list');
+        const oldIgnored = localStorage.getItem('ignored_list');
+        const oldUpdated = localStorage.getItem('last_updated');
+
+        if (oldWatched) localStorage.setItem('user_onur_watched_list', oldWatched);
+        if (oldWatchlist) localStorage.setItem('user_onur_watchlist_list', oldWatchlist);
+        if (oldIgnored) localStorage.setItem('user_onur_ignored_list', oldIgnored);
+        if (oldUpdated) localStorage.setItem('user_onur_last_updated', oldUpdated);
+    }
+
+    document.getElementById('userSelectionOverlay').style.opacity = '1';
+    document.getElementById('userSelectionOverlay').style.display = 'flex';
+
+    setTimeout(() => {
+        document.getElementById('userSelectionOverlay').style.opacity = '0';
+        setTimeout(() => {
+            document.getElementById('userSelectionOverlay').style.display = 'none';
+            init(); // Re-run init with user
+        }, 300);
+    }, 10);
+};
+
+window.switchUser = () => {
+    state.currentUser = null;
+    localStorage.removeItem('active_user');
+    document.documentElement.classList.remove('user-logged-in');
+    location.reload(); // Simplest way to reset everything
+};
 
 
 async function checkLocalServer() {
@@ -147,22 +202,24 @@ function updateSyncUI(message, type = 'active') {
 }
 
 async function loadStateFromCloud() {
+    if (!state.currentUser) return;
     updateSyncUI('Eşitleniyor...', 'active');
 
-    const localWatched = JSON.parse(localStorage.getItem('watched_list')) || [];
-    const localWatchlist = JSON.parse(localStorage.getItem('watchlist_list')) || [];
-    const localIgnored = JSON.parse(localStorage.getItem('ignored_list')) || [];
-    const localTimestamp = parseInt(localStorage.getItem('last_updated')) || 0;
+    const prefix = `user_${state.currentUser}_`;
+    const localWatched = JSON.parse(localStorage.getItem(prefix + 'watched_list')) || [];
+    const localWatchlist = JSON.parse(localStorage.getItem(prefix + 'watchlist_list')) || [];
+    const localIgnored = JSON.parse(localStorage.getItem(prefix + 'ignored_list')) || [];
+    const localTimestamp = parseInt(localStorage.getItem(prefix + 'last_updated')) || 0;
 
     state.watched = localWatched;
     state.watchlist = localWatchlist;
     state.ignored = localIgnored;
 
-    console.log('Yerel veriler yüklendi. Zaman damgası:', localTimestamp);
+    console.log(`[${state.currentUser}] Yerel veriler yüklendi. Zaman damgası:`, localTimestamp);
 
     if (isLocalServerAvailable) {
         try {
-            const response = await fetch(LOCAL_URL);
+            const response = await fetch(`${LOCAL_URL}?user=${state.currentUser}`);
             if (response.ok) {
                 const remoteData = await response.json();
                 const remoteTimestamp = remoteData.lastUpdated || 0;
@@ -188,7 +245,8 @@ async function loadStateFromCloud() {
         }
     } else if (state.cloudSettings.url && state.cloudSettings.key) {
         try {
-            const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker?id=eq.default`, {
+            const userId = `user_${state.currentUser}`;
+            const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker?id=eq.${userId}`, {
                 headers: {
                     'apikey': state.cloudSettings.key,
                     'Authorization': `Bearer ${state.cloudSettings.key}`
@@ -252,19 +310,25 @@ function mergeMovieLists(list1, list2) {
 }
 
 function saveStateToLocal(updateTimestamp = true) {
+    if (!state.currentUser) return;
+    const prefix = `user_${state.currentUser}_`;
     const now = new Date().getTime();
     if (updateTimestamp) {
-        localStorage.setItem('last_updated', now.toString());
+        localStorage.setItem(prefix + 'last_updated', now.toString());
     }
-    localStorage.setItem('watched_list', JSON.stringify(state.watched));
-    localStorage.setItem('watchlist_list', JSON.stringify(state.watchlist));
-    localStorage.setItem('ignored_list', JSON.stringify(state.ignored));
+    localStorage.setItem(prefix + 'watched_list', JSON.stringify(state.watched));
+    localStorage.setItem(prefix + 'watchlist_list', JSON.stringify(state.watchlist));
+    localStorage.setItem(prefix + 'ignored_list', JSON.stringify(state.ignored));
     return now;
 }
 
 // Sadece buluta/dosyaya kaydeder
 async function saveStateToCloudBase(showUI = true) {
+    if (!state.currentUser) return false;
     if (showUI) updateSyncUI('Kaydediliyor...', 'active');
+
+    const prefix = `user_${state.currentUser}_`;
+    const lastUpdated = parseInt(localStorage.getItem(prefix + 'last_updated')) || new Date().getTime();
 
     if (isLocalServerAvailable) {
         try {
@@ -272,10 +336,11 @@ async function saveStateToCloudBase(showUI = true) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    user: state.currentUser,
                     watched: state.watched,
                     watchlist: state.watchlist,
                     ignored: state.ignored,
-                    lastUpdated: parseInt(localStorage.getItem('last_updated')) || new Date().getTime()
+                    lastUpdated: lastUpdated
                 })
             });
             if (showUI) {
@@ -289,7 +354,7 @@ async function saveStateToCloudBase(showUI = true) {
         }
     } else if (state.cloudSettings.url && state.cloudSettings.key) {
         try {
-            // Supabase REST API - UPSERT logic
+            const userId = `user_${state.currentUser}`;
             const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker`, {
                 method: 'POST',
                 headers: {
@@ -299,12 +364,12 @@ async function saveStateToCloudBase(showUI = true) {
                     'Prefer': 'resolution=merge-duplicates'
                 },
                 body: JSON.stringify({
-                    id: 'default',
+                    id: userId,
                     content: {
                         watched: state.watched,
                         watchlist: state.watchlist,
                         ignored: state.ignored,
-                        lastUpdated: parseInt(localStorage.getItem('last_updated')) || new Date().getTime()
+                        lastUpdated: lastUpdated
                     }
                 })
             });
