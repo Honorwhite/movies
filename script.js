@@ -655,13 +655,14 @@ async function loadRecommendedMovies() {
         const itemsToShow = filteredItems.slice(0, 12);
 
         if (itemsToShow.length === 0) {
-            if (recommendedState.page < 20) {
+            if (recommendedState.page < 40) { // Increased search depth
                 recommendedState.page++;
-                recommendedState.isLoading = false;
+                recommendedState.isLoading = false; // Reset early for recursion
                 return loadRecommendedMovies();
             }
             recommendedState.hasMore = false;
-            loadingIndicator.classList.remove('active');
+            loadingIndicator.innerHTML = '<p style="color: var(--text-dim); font-size: 0.8rem; margin-top: 2rem;">Tüm önerileri gördünüz ✨</p>';
+            loadingIndicator.classList.add('active'); // Keep it visible to show the message
             return;
         }
 
@@ -678,6 +679,16 @@ async function loadRecommendedMovies() {
         console.error('Error loading recommended items:', error);
     } finally {
         recommendedState.isLoading = false;
+        // Check if we still need more content after rendering (e.g. on huge screens)
+        setTimeout(() => {
+            const rect = loadingIndicator.getBoundingClientRect();
+            if (rect.top < window.innerHeight + 100 && !recommendedState.isLoading && recommendedState.hasMore) {
+                const searchView = document.getElementById('searchView');
+                if (searchView && searchView.classList.contains('active')) {
+                    loadRecommendedMovies();
+                }
+            }
+        }, 300);
         loadingIndicator.classList.remove('active');
     }
 }
@@ -685,7 +696,7 @@ async function loadRecommendedMovies() {
 function setupInfiniteScroll() {
     const observerOptions = {
         root: null,
-        rootMargin: '0px 0px 1000px 0px',
+        rootMargin: '0px 0px 1500px 0px', // Increased margin for faster loading
         threshold: 0
     };
 
@@ -699,6 +710,14 @@ function setupInfiniteScroll() {
     }, observerOptions);
 
     if (loadingIndicator) observer.observe(loadingIndicator);
+
+    // Initial check in case indicator is already visible
+    setTimeout(() => {
+        if (recommendedState.hasMore && !recommendedState.isLoading) {
+            const rect = loadingIndicator.getBoundingClientRect();
+            if (rect.top < window.innerHeight) loadRecommendedMovies();
+        }
+    }, 1000);
 }
 
 
