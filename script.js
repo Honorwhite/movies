@@ -54,6 +54,7 @@ const watchedSearch = document.getElementById('watchedSearch');
 const recommendedSection = document.getElementById('recommendedSection');
 const recommendedMovies = document.getElementById('recommendedMovies');
 const loadingIndicator = document.getElementById('loadingIndicator');
+const scrollTopBtn = document.getElementById('scrollTopBtn');
 
 let movieToRate = null;
 
@@ -97,6 +98,7 @@ async function init() {
     if (searchResults) searchResults.innerHTML = '';
 
     setupEventListeners();
+    setupScrollTop();
     await checkLocalServer();
 
     // Check for saved user session
@@ -711,14 +713,15 @@ function updateFeaturedCarousel() {
         return div;
     };
 
-    // Populate and clone for infinite loop
-    items.forEach(item => carouselTrack.appendChild(createItem(item)));
+    // Calculate duration for constant speed
+    // Higher value = slower. Basic formula: items * seconds_per_item
+    const secondsPerItem = 4;
+    const totalDuration = items.length * secondsPerItem;
+    carouselTrack.style.setProperty('--duration', `${totalDuration}s`);
 
-    // Clone items enough times to fill the track and ensure smooth loop
-    const cloneCount = Math.ceil(20 / items.length) + 1;
-    for (let i = 0; i < cloneCount; i++) {
-        items.forEach(item => carouselTrack.appendChild(createItem(item)));
-    }
+    // Populate and clone exactly once for the -50% translate loop
+    items.forEach(item => carouselTrack.appendChild(createItem(item)));
+    items.forEach(item => carouselTrack.appendChild(createItem(item)));
 }
 
 // --- Rendering Functions ---
@@ -1120,6 +1123,7 @@ function setupEventListeners() {
 
             views.forEach(v => v.classList.remove('active'));
             document.getElementById(`${viewId}View`).classList.add('active');
+            window.scrollTo(0, 0);
         });
     });
 
@@ -1203,3 +1207,21 @@ function setupEventListeners() {
 
 // Run Init
 init();
+function setupScrollTop() {
+    if (!scrollTopBtn) return;
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 500) {
+            scrollTopBtn.classList.add('visible');
+        } else {
+            scrollTopBtn.classList.remove('visible');
+        }
+    });
+
+    scrollTopBtn.addEventListener('click', () => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    });
+}
