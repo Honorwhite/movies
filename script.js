@@ -478,12 +478,16 @@ async function searchMovies(query) {
     const heroSection = document.getElementById('heroSection');
     if (!query) {
         if (heroSection) heroSection.classList.remove('search-mode');
-        searchResults.innerHTML = '';
+        if (searchResults) {
+            searchResults.classList.remove('active');
+            searchResults.innerHTML = '';
+        }
         updateFeaturedCarousel();
         return;
     }
 
     if (heroSection) heroSection.classList.add('search-mode');
+    if (searchResults) searchResults.classList.add('active');
 
     try {
         const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=en-US`);
@@ -679,25 +683,22 @@ async function loadRecommendedMovies() {
 }
 
 function setupInfiniteScroll() {
-    let scrollTimeout;
+    const observerOptions = {
+        root: null,
+        rootMargin: '0px 0px 1000px 0px',
+        threshold: 0
+    };
 
-    window.addEventListener('scroll', () => {
-        clearTimeout(scrollTimeout);
-
-        scrollTimeout = setTimeout(() => {
-            // Check if user is in search view
+    const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && !recommendedState.isLoading && recommendedState.hasMore) {
             const searchView = document.getElementById('searchView');
-            if (!searchView || !searchView.classList.contains('active')) return;
-
-            // Check if near bottom of page
-            const scrollPosition = window.innerHeight + window.scrollY;
-            const pageHeight = document.documentElement.scrollHeight;
-
-            if (scrollPosition >= pageHeight - 1000) {
+            if (searchView && searchView.classList.contains('active')) {
                 loadRecommendedMovies();
             }
-        }, 100);
-    });
+        }
+    }, observerOptions);
+
+    if (loadingIndicator) observer.observe(loadingIndicator);
 }
 
 
@@ -1329,13 +1330,20 @@ init();
 function setupScrollTop() {
     if (!scrollTopBtn) return;
 
+    let isScrolling;
     window.addEventListener('scroll', () => {
-        if (window.scrollY > 500) {
-            scrollTopBtn.classList.add('visible');
-        } else {
-            scrollTopBtn.classList.remove('visible');
+        if (!isScrolling) {
+            window.requestAnimationFrame(() => {
+                if (window.scrollY > 500) {
+                    scrollTopBtn.classList.add('visible');
+                } else {
+                    scrollTopBtn.classList.remove('visible');
+                }
+                isScrolling = false;
+            });
+            isScrolling = true;
         }
-    });
+    }, { passive: true });
 
     scrollTopBtn.addEventListener('click', () => {
         window.scrollTo({
