@@ -27,6 +27,8 @@ const watchedList = document.getElementById('watchedList');
 const watchlistContainer = document.getElementById('watchlist');
 const featuredCarousel = document.getElementById('featuredCarousel');
 const carouselTrack = document.getElementById('carouselTrack');
+const watchedStatsContainer = document.getElementById('watchedStats');
+const watchlistStatsContainer = document.getElementById('watchlistStats');
 const settingsBtn = document.getElementById('settingsBtn');
 const cancelRatingBtn = null; // Removed
 const rateBtns = null; // Removed
@@ -484,11 +486,40 @@ async function loadRecommendedMovies() {
     loadingIndicator.classList.add('active');
 
     try {
-        const genreParam = recommendedState.selectedGenre ? `&with_genres=${recommendedState.selectedGenre}` : '';
+        let genreId = recommendedState.selectedGenre;
 
-        // Fetch popular/top_rated for both movies and tv
+        // If no genre selected, pick one from user's favorites randomly for variety
+        if (!genreId && state.watched.length > 0) {
+            const genreCounts = {};
+            state.watched.forEach(m => {
+                const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
+                ids.forEach(id => {
+                    genreCounts[id] = (genreCounts[id] || 0) + 1;
+                });
+            });
+
+            const topGenres = Object.entries(genreCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(e => e[0]);
+
+            if (topGenres.length > 0 && Math.random() > 0.3) {
+                genreId = topGenres[Math.floor(Math.random() * topGenres.length)];
+                console.log('Personalizing recommendations based on genre ID:', genreId);
+            }
+        }
+
+        const genreParam = genreId ? `&with_genres=${genreId}` : '';
+
+        // Randomize sort for more variety
+        const sortOptions = ['popularity.desc', 'vote_count.desc', 'vote_average.desc', 'revenue.desc'];
+        const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+
+        // Pick a random page if we are on the first "load" of the session
+        const pageToRequest = recommendedState.page === 1 ? Math.floor(Math.random() * 5) + 1 : recommendedState.page;
+
         const baseURL = `https://api.themoviedb.org/3/discover`;
-        const commonParams = `api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}&sort_by=popularity.desc${genreParam}`;
+        const commonParams = `api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}`;
 
         const [moviesRes, tvRes] = await Promise.all([
             fetch(`${baseURL}/movie?${commonParams}`),
@@ -499,46 +530,34 @@ async function loadRecommendedMovies() {
             moviesRes.json(), tvRes.json()
         ]);
 
-        // Tag and combine
         dataArr[0].results.forEach(m => m.media_type = 'movie');
         dataArr[1].results.forEach(m => m.media_type = 'tv');
 
         let allItems = [...dataArr[0].results, ...dataArr[1].results];
 
-        // Remove duplicates based on ID
+        // Shuffle allItems for better randomness
+        allItems = allItems.sort(() => Math.random() - 0.5);
+
         const uniqueItems = Array.from(new Map(allItems.map(m => [m.id, m])).values());
 
-        // Filter out items already in user's lists, ignored, and already loaded
         const filteredItems = uniqueItems.filter(item => {
             const isInWatched = state.watched.some(m => m.id === item.id);
             const isInWatchlist = state.watchlist.some(m => m.id === item.id);
             const isIgnored = state.ignored.some(m => m.id === item.id);
             const isAlreadyLoaded = recommendedState.loadedMovies.some(m => m.id === item.id);
             const hasValidPoster = item.poster_path;
-            const isHighRated = item.vote_average >= 6.5;
+            const isHighRated = item.vote_average >= 6.0;
 
             const releaseDate = item.release_date || item.first_air_date;
-            const isRecent = releaseDate && new Date(releaseDate).getFullYear() >= 2015;
+            const isNotTooOld = releaseDate && new Date(releaseDate).getFullYear() >= 2000;
 
-            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isHighRated && isRecent;
+            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isHighRated && isNotTooOld;
         });
 
-        // Sort by rating and recency
-        filteredItems.sort((a, b) => {
-            const ratingDiff = b.vote_average - a.vote_average;
-            if (Math.abs(ratingDiff) > 0.5) return ratingDiff;
-
-            const dateA = new Date(a.release_date || a.first_air_date || '2000-01-01');
-            const dateB = new Date(b.release_date || b.first_air_date || '2000-01-01');
-            return dateB - dateA;
-        });
-
-        // Take top items
         const itemsToShow = filteredItems.slice(0, 12);
 
         if (itemsToShow.length === 0) {
-            // If we have more pages but filtered everything out, try next page
-            if (recommendedState.page < 10) {
+            if (recommendedState.page < 20) {
                 recommendedState.page++;
                 recommendedState.isLoading = false;
                 return loadRecommendedMovies();
@@ -548,10 +567,8 @@ async function loadRecommendedMovies() {
             return;
         }
 
-        // Add to loaded movies
         recommendedState.loadedMovies.push(...itemsToShow);
 
-        // Render items
         itemsToShow.forEach(item => {
             const card = createMovieCard(item, 'recommended');
             recommendedMovies.appendChild(card);
@@ -732,6 +749,173 @@ function renderLists() {
     if (watchlistFiltered.length === 0) {
         watchlistContainer.innerHTML = '<div class="empty-state">İzlenecekler listesi boş.</div>';
     }
+
+    renderStats();
+}
+
+async function renderStats() {
+    if (!watchedStatsContainer || !watchlistStatsContainer) return;
+
+    // Watched Stats
+    const watchedMovies = state.watched.filter(m => m.media_type === 'movie');
+    const watchedTV = state.watched.filter(m => m.media_type === 'tv');
+
+    let totalMinutes = 0;
+    let totalEpisodes = 0;
+
+    watchedMovies.forEach(m => {
+        totalMinutes += m.runtime || 100; // heuristic if missing
+    });
+
+    watchedTV.forEach(m => {
+        const eps = m.number_of_episodes || (m.number_of_seasons ? m.number_of_seasons * 10 : 10);
+        const avgRuntime = (m.episode_run_time && m.episode_run_time[0]) || 45;
+        totalEpisodes += eps;
+        totalMinutes += eps * avgRuntime;
+    });
+
+    const hours = Math.floor(totalMinutes / 60);
+    const days = (hours / 24).toFixed(1);
+
+    // Calculate average rating for Watched
+    const ratedWatched = state.watched.filter(m => m.vote_average > 0);
+    const watchedAvgRating = ratedWatched.length > 0
+        ? (ratedWatched.reduce((acc, m) => acc + m.vote_average, 0) / ratedWatched.length).toFixed(1)
+        : '0.0';
+
+    watchedStatsContainer.innerHTML = `
+        <div class="stat-card accent">
+            <div class="stat-icon"><i class="fas fa-clock"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${hours} <small style="font-size: 0.7rem; color: var(--text-muted)">saat</small></span>
+                <span class="stat-label">Toplam Süre (${days} gün)</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-film"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${watchedMovies.length}</span>
+                <span class="stat-label">Film</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-tv"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${watchedTV.length} <small style="font-size: 0.7rem; color: var(--text-muted)">dizi</small></span>
+                <span class="stat-label">${totalEpisodes} Toplam Bölüm</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-star" style="color: #f59e0b"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${watchedAvgRating}</span>
+                <span class="stat-label">Ort. Puan</span>
+            </div>
+        </div>
+    `;
+
+    // Watchlist Stats
+    const wlMovies = state.watchlist.filter(m => m.media_type === 'movie');
+    const wlTV = state.watchlist.filter(m => m.media_type === 'tv');
+
+    let wlMinutes = 0;
+    wlMovies.forEach(m => wlMinutes += m.runtime || 100);
+    wlTV.forEach(m => {
+        const eps = m.number_of_episodes || (m.number_of_seasons ? m.number_of_seasons * 10 : 10);
+        const avgRuntime = (m.episode_run_time && m.episode_run_time[0]) || 45;
+        wlMinutes += eps * avgRuntime;
+    });
+
+    const wlHours = Math.floor(wlMinutes / 60);
+
+    // Calculate average rating for Watchlist
+    const ratedWatchlist = state.watchlist.filter(m => m.vote_average > 0);
+    const watchlistAvgRating = ratedWatchlist.length > 0
+        ? (ratedWatchlist.reduce((acc, m) => acc + m.vote_average, 0) / ratedWatchlist.length).toFixed(1)
+        : '0.0';
+
+    watchlistStatsContainer.innerHTML = `
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${wlHours} <small style="font-size: 0.7rem; color: var(--text-muted)">saat</small></span>
+                <span class="stat-label">Kalan Süre</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-film"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${wlMovies.length}</span>
+                <span class="stat-label">Kalan Film</span>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-tv"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${wlTV.length}</span>
+                <span class="stat-label">Kalan Dizi</span>
+            </div>
+        </div>
+         <div class="stat-card">
+            <div class="stat-icon"><i class="fas fa-star" style="color: #f59e0b"></i></div>
+            <div class="stat-content">
+                <span class="stat-value">${watchlistAvgRating}</span>
+                <span class="stat-label">Ort. Puan</span>
+            </div>
+        </div>
+    `;
+
+    // Background detail fetcher (quietly)
+    fetchMissingDetails();
+}
+
+async function fetchItemDetails(id, mediaType) {
+    try {
+        const response = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=en-US`);
+        return await response.json();
+    } catch (e) {
+        console.error('Error fetching details:', e);
+        return null;
+    }
+}
+
+let isFetchingDetails = false;
+async function fetchMissingDetails() {
+    if (isFetchingDetails) return;
+    isFetchingDetails = true;
+
+    const allItems = [...state.watched, ...state.watchlist];
+    const missing = allItems.filter(m => {
+        if (m.media_type === 'movie') return !m.runtime;
+        if (m.media_type === 'tv') return !m.number_of_episodes;
+        return false;
+    });
+
+    if (missing.length === 0) {
+        isFetchingDetails = false;
+        return;
+    }
+
+    // Fetch one by one to avoid rate limits and UI lag
+    for (const item of missing) {
+        const details = await fetchItemDetails(item.id, item.media_type);
+        if (details) {
+            // Update item in state
+            const targetList = state.watched.find(m => m.id === item.id) ? state.watched : state.watchlist;
+            const idx = targetList.findIndex(m => m.id === item.id);
+            if (idx !== -1) {
+                targetList[idx] = { ...targetList[idx], ...details };
+                // We don't saveState() every time to avoid too many writes
+            }
+        }
+        // Small delay
+        await new Promise(r => setTimeout(r, 200));
+    }
+
+    isFetchingDetails = false;
+    // We removed saveState() and renderStats() from here to prevent infinite loop of syncing
+    // The details will be saved to local/cloud on next manual action (add/remove)
+    console.log('Background details fetch completed.');
 }
 
 function filterList(list, searchQuery, genreId, sortType = 'abc') {
@@ -793,26 +977,32 @@ function removeCardFromRecommended(id) {
 }
 
 
-window.addToWatchlist = (movie) => {
+window.addToWatchlist = async (movie) => {
     if (state.watchlist.find(m => m.id === movie.id)) {
         alert('Bu zaten izlenecekler listenizde!');
         return;
     }
-    state.watchlist.push(movie);
+    const details = await fetchItemDetails(movie.id, movie.media_type || 'movie');
+    const movieWithDetails = { ...movie, ...details };
+    state.watchlist.push(movieWithDetails);
     saveState();
     renderLists();
     removeCardFromSearch(movie.id);
     removeCardFromRecommended(movie.id);
 };
 
-window.addToWatched = (movie) => {
+window.addToWatched = async (movie) => {
     if (state.watched.find(m => m.id === movie.id)) {
         alert('Bu zaten izlediğiniz filmler listenizde!');
         return;
     }
     // Remove from watchlist if exists
     state.watchlist = state.watchlist.filter(m => m.id !== movie.id);
-    state.watched.push(movie);
+
+    const details = await fetchItemDetails(movie.id, movie.media_type || 'movie');
+    const movieWithDetails = { ...movie, ...details };
+
+    state.watched.push(movieWithDetails);
     saveState();
     renderLists();
     removeCardFromSearch(movie.id);
