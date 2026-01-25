@@ -73,11 +73,17 @@
     <main class="content-container">
         <!-- Search View -->
         <section id="searchView" class="view active">
-            <div class="search-header">
-                <h1>Yeni Bir Şeyler Keşfedin</h1>
-                <div class="search-bar-container">
-                    <input type="text" id="movieSearch" placeholder="Film veya dizi arayın...">
-                    <button id="searchBtn"><i class="fas fa-search"></i></button>
+            <div class="search-header" id="heroSection">
+                <div class="hero-backdrop" id="heroBackdrop"></div>
+                <div class="hero-content">
+                    <h1>Yeni Bir Şeyler Keşfedin</h1>
+                    <div class="search-bar-container">
+                        <input type="text" id="movieSearch" placeholder="Film veya dizi arayın...">
+                        <button id="searchBtn"><i class="fas fa-search"></i></button>
+                    </div>
+                    <div id="heroMovieInfo" class="hero-movie-info">
+                        <!-- Will be populated by JS -->
+                    </div>
                 </div>
             </div>
 

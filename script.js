@@ -75,6 +75,12 @@ let watchlistSectionState = {
     selectedGenre: null
 };
 
+let heroState = {
+    trendingItems: [],
+    currentIndex: 0,
+    interval: null
+};
+
 const genreChips = document.getElementById('genreChips');
 const watchedGenreChips = document.getElementById('watchedGenreChips');
 const watchlistGenreChips = document.getElementById('watchlistGenreChips');
@@ -127,6 +133,7 @@ async function init() {
     // Load initial recommended movies
     initGenres();
     loadRecommendedMovies();
+    updateHeroSection();
 
     // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
@@ -468,11 +475,15 @@ function handleRestore(event) {
 
 
 async function searchMovies(query) {
+    const heroSection = document.getElementById('heroSection');
     if (!query) {
+        if (heroSection) heroSection.classList.remove('search-mode');
         searchResults.innerHTML = '';
         updateFeaturedCarousel();
         return;
     }
+
+    if (heroSection) heroSection.classList.add('search-mode');
 
     try {
         const response = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&language=en-US`);
@@ -488,8 +499,8 @@ async function searchMovies(query) {
 async function initGenres() {
     try {
         const [movieGenres, tvGenres] = await Promise.all([
-            fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=tr-TR`),
-            fetch(`https://api.themoviedb.org/3/genre/tv/list?api_key=${TMDB_API_KEY}&language=tr-TR`)
+            fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=en-US`),
+            fetch(`https://api.themoviedb.org/3/genre/tv/list?api_key=${TMDB_API_KEY}&language=en-US`)
         ]);
 
         const mData = await movieGenres.json();
@@ -719,9 +730,111 @@ function updateFeaturedCarousel() {
     const totalDuration = items.length * secondsPerItem;
     carouselTrack.style.setProperty('--duration', `${totalDuration}s`);
 
-    // Populate and clone exactly once for the -50% translate loop
     items.forEach(item => carouselTrack.appendChild(createItem(item)));
     items.forEach(item => carouselTrack.appendChild(createItem(item)));
+}
+
+async function updateHeroSection() {
+    const heroBackdrop = document.getElementById('heroBackdrop');
+    const heroMovieInfo = document.getElementById('heroMovieInfo');
+
+    if (!heroBackdrop || !heroMovieInfo) return;
+
+    // Helper to render a specific movie
+    const renderMovie = (movie) => {
+        heroMovieInfo.classList.remove('active');
+
+        setTimeout(() => {
+            // Priority: Turkish Title > Original Title > Name
+            const title = movie.title || movie.name || movie.original_title || movie.original_name;
+            const releaseDate = movie.release_date || movie.first_air_date || '';
+            const year = releaseDate ? releaseDate.split('-')[0] : 'N/A';
+            const backdropUrl = `https://image.tmdb.org/t/p/original${movie.backdrop_path}`;
+            const watchUrl = `https://izlelan.vercel.app/ara?q=${encodeURIComponent(title)}`;
+
+            heroBackdrop.style.backgroundImage = `url(${backdropUrl})`;
+
+            heroMovieInfo.innerHTML = `
+                <div class="hero-movie-title" onclick="window.open('${watchUrl}', '_blank')">
+                    <i class="fas fa-play" style="margin-right: 8px; font-size: 0.8rem;"></i> ${title}
+                </div>
+                <div class="hero-movie-meta">
+                    <span><i class="far fa-calendar"></i> ${year}</span>
+                    <span><i class="fas fa-star"></i> ${movie.vote_average?.toFixed(1) || 'N/A'}</span>
+                    <span><i class="fas fa-magic"></i> Sana Özel Seçim</span>
+                </div>
+            `;
+
+            setTimeout(() => {
+                heroMovieInfo.classList.add('active');
+            }, 50);
+        }, 800);
+    };
+
+    try {
+        // If we don't have items yet or need to refresh
+        if (heroState.trendingItems.length === 0) {
+            let topGenreIds = [];
+            if (state.watched.length > 0) {
+                const genreCounts = {};
+                state.watched.forEach(m => {
+                    const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
+                    ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
+                });
+                topGenreIds = Object.entries(genreCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3)
+                    .map(e => parseInt(e[0]));
+            }
+
+            // 1. Fetch Trending (Always good for variety)
+            const trendRes = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&language=en-US`);
+            const trendData = await trendRes.json();
+            let pool = trendData.results.filter(item => item.backdrop_path);
+
+            // 2. If user has favorite genres, fetch specific recommendations
+            if (topGenreIds.length > 0) {
+                // Fetch from random pages to increase variety
+                const randomPage = Math.floor(Math.random() * 5) + 1;
+                const genreStr = topGenreIds.join(',');
+
+                const [movieRecs, tvRecs] = await Promise.all([
+                    fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreStr}&page=${randomPage}&language=en-US`).then(r => r.json()),
+                    fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&with_genres=${genreStr}&page=${randomPage}&language=en-US`).then(r => r.json())
+                ]);
+
+                if (movieRecs.results) pool = [...pool, ...movieRecs.results.filter(item => item.backdrop_path)];
+                if (tvRecs.results) pool = [...pool, ...tvRecs.results.filter(item => item.backdrop_path)];
+            }
+
+            // 3. De-duplicate and shuffle
+            const uniquePool = Array.from(new Map(pool.map(item => [item.id, item])).values());
+            heroState.trendingItems = uniquePool.sort(() => Math.random() - 0.5).slice(0, 25);
+            heroState.currentIndex = 0;
+
+            console.log(`[Hero] Personalized pool size: ${heroState.trendingItems.length}`);
+        }
+
+        if (heroState.trendingItems.length === 0) return;
+
+        // Render first item
+        renderMovie(heroState.trendingItems[heroState.currentIndex]);
+
+        // Clear existing interval if any
+        if (heroState.interval) clearInterval(heroState.interval);
+
+        // Set up cycling interval (8 seconds)
+        heroState.interval = setInterval(() => {
+            const searchView = document.getElementById('searchView');
+            if (searchView && searchView.classList.contains('active')) {
+                heroState.currentIndex = (heroState.currentIndex + 1) % heroState.trendingItems.length;
+                renderMovie(heroState.trendingItems[heroState.currentIndex]);
+            }
+        }, 8000);
+
+    } catch (error) {
+        console.error('Error updating hero section:', error);
+    }
 }
 
 // --- Rendering Functions ---
@@ -746,8 +859,11 @@ function renderSearchResults(movies) {
 }
 
 function createMovieCard(movie, context) {
+    const isWatched = state.watched.find(m => m.id === movie.id);
+    const isWatchlist = state.watchlist.find(m => m.id === movie.id);
+
     const card = document.createElement('div');
-    card.className = 'movie-card';
+    card.className = `movie-card ${(isWatched || isWatchlist) && context === 'search' ? 'in-list' : ''}`;
     card.setAttribute('data-id', movie.id);
     card.setAttribute('data-context', context);
 
@@ -755,9 +871,6 @@ function createMovieCard(movie, context) {
     const releaseDate = movie.release_date || movie.first_air_date || '';
     const year = releaseDate ? releaseDate.split('-')[0] : 'N/A';
     const posterUrl = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
-
-    const isWatched = state.watched.find(m => m.id === movie.id);
-    const isWatchlist = state.watchlist.find(m => m.id === movie.id);
 
     const removeBtnHtml = (context === 'watched' || context === 'watchlist') ? `
         <button class="action-btn remove-btn" onclick="event.stopPropagation(); ${context === 'watched' ? `removeFromWatched(${movie.id})` : `removeFromWatchlist(${movie.id})`}" title="Listeden Kaldır">
@@ -1124,6 +1237,10 @@ function setupEventListeners() {
             views.forEach(v => v.classList.remove('active'));
             document.getElementById(`${viewId}View`).classList.add('active');
             window.scrollTo(0, 0);
+
+            if (viewId === 'search') {
+                updateHeroSection();
+            }
         });
     });
 
@@ -1134,9 +1251,11 @@ function setupEventListeners() {
             if (e.key === 'Enter') searchMovies(searchInput.value);
         });
         searchInput.addEventListener('input', () => {
-            if (!searchInput.value.trim()) {
-                searchResults.innerHTML = '';
-                updateFeaturedCarousel();
+            const query = searchInput.value.trim();
+            if (query.length >= 2) {
+                searchMovies(query);
+            } else if (!query) {
+                searchMovies('');
             }
         });
     }
