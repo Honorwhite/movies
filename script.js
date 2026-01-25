@@ -127,13 +127,13 @@ async function init() {
     if (supabaseUrlInput) supabaseUrlInput.value = state.cloudSettings.url;
     if (supabaseKeyInput) supabaseKeyInput.value = state.cloudSettings.key;
 
+    updateHeroSection(); // Move to top for faster loading
     await loadStateFromCloud();
     renderLists();
 
     // Load initial recommended movies
     initGenres();
     loadRecommendedMovies();
-    updateHeroSection();
 
     // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
@@ -760,98 +760,98 @@ async function updateHeroSection() {
 
     if (!heroBackdrop || !heroMovieInfo) return;
 
-    // Helper to render a specific movie
-    const renderMovie = (movie) => {
+    const renderMovie = (movie, immediate = false) => {
         heroMovieInfo.classList.remove('active');
 
-        setTimeout(() => {
-            // Priority: Turkish Title > Original Title > Name
+        const setup = () => {
             const title = movie.title || movie.name || movie.original_title || movie.original_name;
             const releaseDate = movie.release_date || movie.first_air_date || '';
             const year = releaseDate ? releaseDate.split('-')[0] : 'N/A';
-            const backdropUrl = `https://image.tmdb.org/t/p/original${movie.backdrop_path}`;
+            const backdropUrl = `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`;
             const watchUrl = `https://izlelan.vercel.app/ara?q=${encodeURIComponent(title)}`;
 
-            heroBackdrop.style.backgroundImage = `url(${backdropUrl})`;
+            heroBackdrop.style.opacity = '0';
 
-            heroMovieInfo.innerHTML = `
-                <div class="hero-movie-title" onclick="window.open('${watchUrl}', '_blank')">
-                    <i class="fas fa-play" style="margin-right: 8px; font-size: 0.8rem;"></i> ${title}
-                </div>
-                <div class="hero-movie-meta">
-                    <span><i class="far fa-calendar"></i> ${year}</span>
-                    <span><i class="fas fa-star"></i> ${movie.vote_average?.toFixed(1) || 'N/A'}</span>
-                    <span><i class="fas fa-magic"></i> Sana Özel Seçim</span>
-                </div>
-            `;
+            const injectContent = () => {
+                heroMovieInfo.innerHTML = `
+                    <div class="hero-actions">
+                        <button class="hero-primary-btn" onclick="window.open('${watchUrl}', '_blank')" title="${title}">
+                            <i class="fas fa-play"></i> <span>${title}</span>
+                        </button>
+                        <button class="hero-btn watchlist-btn" onclick="addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})">
+                            <i class="fas fa-plus"></i> <span class="btn-text">Listeye Ekle</span>
+                        </button>
+                        <button class="hero-btn watched-btn" onclick="addToWatched(${JSON.stringify(movie).replace(/"/g, '&quot;')})">
+                            <i class="fas fa-check"></i> <span class="btn-text">İzledim</span>
+                        </button>
+                    </div>
+                    <div class="hero-movie-meta">
+                        <span><i class="far fa-calendar"></i> ${year}</span>
+                        <span><i class="fas fa-star"></i> ${movie.vote_average?.toFixed(1) || 'N/A'}</span>
+                        <span><i class="fas fa-magic"></i> Sana Özel Seçim</span>
+                    </div>
+                `;
+                setTimeout(() => heroMovieInfo.classList.add('active'), 50);
+            };
 
-            setTimeout(() => {
-                heroMovieInfo.classList.add('active');
-            }, 50);
-        }, 800);
+            const img = new Image();
+            img.src = backdropUrl;
+            img.onload = () => {
+                heroBackdrop.style.backgroundImage = `url(${backdropUrl})`;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        heroBackdrop.style.opacity = '0.6';
+                        injectContent();
+                    });
+                });
+            };
+            if (img.complete) img.onload();
+        };
+
+        if (immediate) {
+            setup();
+        } else {
+            setTimeout(setup, 800);
+        }
     };
 
     try {
         // If we don't have items yet or need to refresh
-        if (heroState.trendingItems.length === 0) {
-            let topGenreIds = [];
-            if (state.watched.length > 0) {
-                const genreCounts = {};
-                state.watched.forEach(m => {
-                    const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
-                    ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
-                });
-                topGenreIds = Object.entries(genreCounts)
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 3)
-                    .map(e => parseInt(e[0]));
-            }
-
-            // 1. Fetch Trending (Always good for variety)
-            const trendRes = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&language=en-US`);
-            const trendData = await trendRes.json();
-            let pool = trendData.results.filter(item => item.backdrop_path);
-
-            // 2. If user has favorite genres, fetch specific recommendations
-            if (topGenreIds.length > 0) {
-                // Fetch from random pages to increase variety
-                const randomPage = Math.floor(Math.random() * 5) + 1;
-                const genreStr = topGenreIds.join(',');
-
-                const [movieRecs, tvRecs] = await Promise.all([
-                    fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreStr}&page=${randomPage}&language=en-US`).then(r => r.json()),
-                    fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&with_genres=${genreStr}&page=${randomPage}&language=en-US`).then(r => r.json())
-                ]);
-
-                if (movieRecs.results) pool = [...pool, ...movieRecs.results.filter(item => item.backdrop_path)];
-                if (tvRecs.results) pool = [...pool, ...tvRecs.results.filter(item => item.backdrop_path)];
-            }
-
-            // 3. De-duplicate and shuffle
-            const uniquePool = Array.from(new Map(pool.map(item => [item.id, item])).values());
-            heroState.trendingItems = uniquePool.sort(() => Math.random() - 0.5).slice(0, 25);
-            heroState.currentIndex = 0;
-
-            console.log(`[Hero] Personalized pool size: ${heroState.trendingItems.length}`);
+        let pool = [];
+        let topGenreIds = [];
+        if (state.watched.length > 0) {
+            const genreCounts = {};
+            state.watched.forEach(m => {
+                const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
+                ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
+            });
+            topGenreIds = Object.entries(genreCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .map(e => parseInt(e[0]));
         }
 
-        if (heroState.trendingItems.length === 0) return;
+        // Randomly decide to fetch trending or specific genres
+        const useTrending = topGenreIds.length === 0 || Math.random() > 0.7;
 
-        // Render first item
-        renderMovie(heroState.trendingItems[heroState.currentIndex]);
+        if (useTrending) {
+            const randomPage = Math.floor(Math.random() * 3) + 1;
+            const trendRes = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&language=en-US&page=${randomPage}`);
+            const data = await trendRes.json();
+            pool = data.results.filter(item => item.backdrop_path);
+        } else {
+            const randomPage = Math.floor(Math.random() * 5) + 1;
+            const genreStr = topGenreIds.join(',');
+            const res = await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreStr}&page=${randomPage}&language=en-US`);
+            const data = await res.json();
+            pool = data.results.filter(item => item.backdrop_path);
+        }
 
-        // Clear existing interval if any
-        if (heroState.interval) clearInterval(heroState.interval);
+        if (pool.length === 0) return;
 
-        // Set up cycling interval (8 seconds)
-        heroState.interval = setInterval(() => {
-            const searchView = document.getElementById('searchView');
-            if (searchView && searchView.classList.contains('active')) {
-                heroState.currentIndex = (heroState.currentIndex + 1) % heroState.trendingItems.length;
-                renderMovie(heroState.trendingItems[heroState.currentIndex]);
-            }
-        }, 8000);
-
+        // Pick one random item from the pool and render
+        const randomItem = pool[Math.floor(Math.random() * pool.length)];
+        renderMovie(randomItem, true);
     } catch (error) {
         console.error('Error updating hero section:', error);
     }

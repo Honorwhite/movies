@@ -384,9 +384,9 @@ body {
     margin-right: -50vw;
     margin-top: -80px;
     /* Negate body padding-top */
-    padding: 12rem 2rem 6rem 2rem;
+    padding: 8rem 2rem 6rem 2rem;
     overflow: hidden;
-    min-height: 650px;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -403,8 +403,8 @@ body {
     height: 100%;
     background-size: cover;
     background-position: center;
-    opacity: 0.6;
-    transition: var(--transition);
+    opacity: 0;
+    transition: opacity 1.2s ease-out, var(--transition);
     mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
 }
@@ -447,6 +447,8 @@ body {
     opacity: 0;
     transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
     transition-delay: 0.3s;
+    min-height: 160px;
+    /* Reserve space to prevent layout jump */
 }
 
 .hero-movie-info.active {
@@ -464,23 +466,101 @@ body {
     display: none;
 }
 
-.hero-movie-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--text-main);
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    padding: 0.5rem 1.5rem;
-    border-radius: 100px;
-    border: 1px solid var(--glass-border);
-    transition: var(--transition);
-    cursor: pointer;
+.hero-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
-.hero-movie-title:hover {
-    background: var(--primary);
-    border-color: var(--primary);
-    transform: scale(1.05);
+.hero-primary-btn {
+    padding: 1rem 2.5rem;
+    background: white;
+    color: #070b14;
+    border: none;
+    border-radius: 100px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 30px rgba(255, 255, 255, 0.2);
+    max-width: 400px;
+}
+
+.hero-primary-btn span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hero-primary-btn:hover {
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 15px 40px rgba(255, 255, 255, 0.3);
+    background: var(--primary-light);
+    color: white;
+}
+
+.hero-btn {
+    padding: 1rem 2rem;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 100px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.hero-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05) translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+
+
+@media (max-width: 768px) {
+    .hero-actions {
+        gap: 0.8rem;
+    }
+
+    .hero-primary-btn {
+        width: 100%;
+        max-width: none;
+        padding: 0.8rem 1.5rem;
+        font-size: 1rem;
+        justify-content: center;
+    }
+
+    .hero-primary-btn span {
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        line-clamp: 1;
+        -webkit-box-orient: vertical;
+    }
+
+    .hero-btn {
+        padding: 0.8rem 1.2rem;
+        font-size: 0.9rem;
+        flex: 1;
+        justify-content: center;
+    }
+
+    .hero-btn .btn-text {
+        display: none;
+    }
 }
 
 .hero-movie-meta {
@@ -1600,5 +1680,96 @@ body {
         width: 45px;
         height: 45px;
         z-index: 1100;
+    }
+}
+
+/* Scroll Indicator */
+.scroll-indicator {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    z-index: 10;
+    transition: var(--transition);
+}
+
+.search-header.search-mode .scroll-indicator {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 20px);
+}
+
+.mouse {
+    width: 26px;
+    height: 42px;
+    border: 2px solid var(--text-muted);
+    border-radius: 20px;
+    position: relative;
+}
+
+.wheel {
+    width: 4px;
+    height: 8px;
+    background: var(--primary);
+    border-radius: 2px;
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    animation: scroll-wheel 2s infinite;
+}
+
+.arrows span {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid var(--text-muted);
+    border-bottom: 2px solid var(--text-muted);
+    transform: rotate(45deg);
+    margin: -4px;
+    animation: arrows 2s infinite;
+}
+
+.arrows span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+@keyframes scroll-wheel {
+    0% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(15px);
+    }
+}
+
+@keyframes arrows {
+    0% {
+        opacity: 0;
+        transform: rotate(45deg) translate(-5px, -5px);
+    }
+
+    50% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+        transform: rotate(45deg) translate(5px, 5px);
+    }
+}
+
+@media (max-width: 768px) {
+    .scroll-indicator {
+        bottom: 80px;
+        transform: translateX(-50%) scale(0.8);
     }
 }
