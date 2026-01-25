@@ -81,6 +81,21 @@ const watchlistGenreChips = document.getElementById('watchlistGenreChips');
 
 // --- Initialization ---
 async function init() {
+    // Reset states for the new user
+    recommendedState = {
+        page: 1,
+        isLoading: false,
+        hasMore: true,
+        loadedMovies: [],
+        selectedGenre: null
+    };
+    watchedListState = { selectedGenre: null };
+    watchlistSectionState = { selectedGenre: null };
+
+    // Clear UI containers
+    if (recommendedMovies) recommendedMovies.innerHTML = '';
+    if (searchResults) searchResults.innerHTML = '';
+
     setupEventListeners();
     await checkLocalServer();
 
@@ -565,12 +580,13 @@ async function loadRecommendedMovies() {
 
             const topGenres = Object.entries(genreCounts)
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 5)
+                .slice(0, 3) // Narrower pool for better personalization
                 .map(e => e[0]);
 
-            if (topGenres.length > 0 && Math.random() > 0.3) {
+            // Higher probability of personalization (85%)
+            if (topGenres.length > 0 && Math.random() > 0.15) {
                 genreId = topGenres[Math.floor(Math.random() * topGenres.length)];
-                console.log('Personalizing recommendations based on genre ID:', genreId);
+                console.log(`[${state.currentUser}] Personalizing recommendations based on genre ID:`, genreId);
             }
         }
 
@@ -580,8 +596,8 @@ async function loadRecommendedMovies() {
         const sortOptions = ['popularity.desc', 'vote_count.desc', 'vote_average.desc', 'revenue.desc'];
         const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
 
-        // Pick a random page if we are on the first "load" of the session
-        const pageToRequest = recommendedState.page === 1 ? Math.floor(Math.random() * 5) + 1 : recommendedState.page;
+        // Stay on page 1 for personalized content to ensure quality, otherwise random
+        const pageToRequest = recommendedState.page === 1 ? (genreId ? 1 : Math.floor(Math.random() * 5) + 1) : recommendedState.page;
 
         const baseURL = `https://api.themoviedb.org/3/discover`;
         const commonParams = `api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}`;
