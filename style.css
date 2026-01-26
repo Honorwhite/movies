@@ -154,11 +154,19 @@ body {
     width: 600px;
     height: 600px;
     border-radius: 50%;
-    opacity: 0.15;
-    filter: blur(80px);
+    opacity: 0.1;
+    filter: blur(60px);
+    /* Reduced from 80px */
     animation: move 30s infinite cubic-bezier(0.4, 0, 0.2, 1) alternate;
     transform: translateZ(0);
     will-change: transform;
+}
+
+/* Disable heavy blobs on mobile to prevent overheating */
+@media (max-width: 768px) {
+    .background-blobs {
+        display: none;
+    }
 }
 
 .blob-1 {

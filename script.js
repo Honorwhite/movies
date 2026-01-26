@@ -655,14 +655,15 @@ async function loadRecommendedMovies() {
         const itemsToShow = filteredItems.slice(0, 12);
 
         if (itemsToShow.length === 0) {
-            if (recommendedState.page < 40) { // Increased search depth
+            if (recommendedState.page < 40) {
                 recommendedState.page++;
-                recommendedState.isLoading = false; // Reset early for recursion
-                return loadRecommendedMovies();
+                recommendedState.isLoading = false;
+                // Add a small delay for recursion to let the CPU breathe
+                return setTimeout(loadRecommendedMovies, 100);
             }
             recommendedState.hasMore = false;
             loadingIndicator.innerHTML = '<p style="color: var(--text-dim); font-size: 0.8rem; margin-top: 2rem;">Tüm önerileri gördünüz ✨</p>';
-            loadingIndicator.classList.add('active'); // Keep it visible to show the message
+            loadingIndicator.classList.add('active');
             return;
         }
 
@@ -696,8 +697,8 @@ async function loadRecommendedMovies() {
 function setupInfiniteScroll() {
     const observerOptions = {
         root: null,
-        rootMargin: '0px 0px 1800px 0px', // Large margin to pre-fetch early
-        threshold: [0, 0.1]
+        rootMargin: '0px 0px 1200px 0px',
+        threshold: 0
     };
 
     const triggerLoading = () => {
@@ -717,30 +718,21 @@ function setupInfiniteScroll() {
 
     if (loadingIndicator) observer.observe(loadingIndicator);
 
-    // Fallback: Throttled scroll listener to catch any missed observer triggers
-    let scrollTimeout;
+    // Efficient throttled scroll listener
+    let scrollThrottled = false;
     window.addEventListener('scroll', () => {
-        if (!scrollTimeout) {
-            scrollTimeout = setTimeout(() => {
-                scrollTimeout = null;
+        if (!scrollThrottled) {
+            window.requestAnimationFrame(() => {
                 const scrollPos = window.innerHeight + window.scrollY;
-                const threshold = document.documentElement.scrollHeight - 2000; // Trigger 2000px before end
+                const threshold = document.documentElement.scrollHeight - 1500;
                 if (scrollPos > threshold) {
                     triggerLoading();
                 }
-            }, 200);
+                scrollThrottled = false;
+            });
+            scrollThrottled = true;
         }
     }, { passive: true });
-
-    // Periodical check to ensure we didn't get stuck (e.g. after container size change)
-    setInterval(() => {
-        if (recommendedState.hasMore && !recommendedState.isLoading) {
-            const rect = loadingIndicator.getBoundingClientRect();
-            if (rect.top < window.innerHeight + 500) {
-                triggerLoading();
-            }
-        }
-    }, 2000);
 }
 
 
