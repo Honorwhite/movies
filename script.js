@@ -14,8 +14,8 @@ let state = {
     watchlist: [],
     currentView: 'search',
     cloudSettings: {
-        url: localStorage.getItem('supabase_url') || 'https://gbdqycgclxhblhhjhpbm.supabase.co',
-        key: localStorage.getItem('supabase_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
+        url: 'https://gbdqycgclxhblhhjhpbm.supabase.co',
+        key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
     },
     ignored: []
 };
@@ -39,11 +39,6 @@ const rateBtns = null; // Removed
 
 const watchlistSearch = document.getElementById('watchlistSearch');
 const syncStatus = document.getElementById('syncStatus');
-const settingsModal = document.getElementById('settingsModal');
-const saveCloudSettingsBtn = document.getElementById('saveCloudSettings');
-const closeSettingsModalBtn = document.getElementById('closeSettingsModal');
-const supabaseUrlInput = document.getElementById('supabaseUrl');
-const supabaseKeyInput = document.getElementById('supabaseKey');
 
 const backupBtn = document.getElementById('backupBtn');
 const restoreBtn = document.getElementById('restoreBtn');
@@ -123,9 +118,7 @@ async function init() {
         if (nameSpan) nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
     }
 
-    // Fill settings inputs
-    if (supabaseUrlInput) supabaseUrlInput.value = state.cloudSettings.url;
-    if (supabaseKeyInput) supabaseKeyInput.value = state.cloudSettings.key;
+
 
     updateHeroSection(); // Move to top for faster loading
     await loadStateFromCloud();
@@ -1327,32 +1320,7 @@ function setupEventListeners() {
         });
     });
 
-    if (typeof settingsBtn !== 'undefined' && settingsBtn) {
-        settingsBtn.addEventListener('click', () => {
-            if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.add('active');
-        });
-    }
 
-    if (typeof closeSettingsModalBtn !== 'undefined' && closeSettingsModalBtn) {
-        closeSettingsModalBtn.addEventListener('click', () => {
-            if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.remove('active');
-        });
-    }
-
-    if (typeof saveCloudSettingsBtn !== 'undefined' && saveCloudSettingsBtn) {
-        saveCloudSettingsBtn.addEventListener('click', async () => {
-            if (typeof supabaseUrlInput !== 'undefined' && supabaseUrlInput && typeof supabaseKeyInput !== 'undefined' && supabaseKeyInput) {
-                state.cloudSettings.url = supabaseUrlInput.value.trim();
-                state.cloudSettings.key = supabaseKeyInput.value.trim();
-
-                localStorage.setItem('supabase_url', state.cloudSettings.url);
-                localStorage.setItem('supabase_key', state.cloudSettings.key);
-            }
-
-            if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.classList.remove('active');
-            await loadStateFromCloud();
-        });
-    }
 
     // Setup infinite scroll for recommended movies
     setupInfiniteScroll();

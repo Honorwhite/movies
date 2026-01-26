@@ -79,8 +79,8 @@
                 <div class="hero-content">
                     <h1>Yeni Bir Şeyler Keşfedin</h1>
                     <div class="search-bar-container">
-                        <input type="text" id="movieSearch" placeholder="Film veya dizi arayın..." autocomplete="off"
-                            spellcheck="false">
+                        <input type="search" id="movieSearch" name="movieSearch" placeholder="Film veya dizi arayın..."
+                            autocomplete="off" spellcheck="false">
                         <button id="searchBtn"><i class="fas fa-search"></i></button>
                     </div>
                     <div id="heroMovieInfo" class="hero-movie-info">
@@ -103,14 +103,7 @@
                 <!-- Search results will be injected here -->
             </div>
 
-            <div id="featuredCarousel" class="featured-carousel-container">
-                <h3 class="carousel-title">Takip Listenizden Öne Çıkanlar</h3>
-                <div class="carousel-track-wrapper">
-                    <div id="carouselTrack" class="carousel-track">
-                        <!-- Watchlist items will be cloned and injected here -->
-                    </div>
-                </div>
-            </div>
+
 
             <!-- Recommended Movies Section -->
             <div id="recommendedSection" class="recommended-section">
@@ -147,8 +140,8 @@
                     </div>
                     <div class="list-search-wrapper">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="watchedSearch" placeholder="Listede ara..." class="list-search-input"
-                            autocomplete="off">
+                        <input type="search" id="watchedSearch" name="watchedSearch" placeholder="Listede ara..."
+                            class="list-search-input" autocomplete="off">
                     </div>
                 </div>
             </div>
@@ -180,8 +173,8 @@
                     </div>
                     <div class="list-search-wrapper">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="watchlistSearch" placeholder="Listede ara..." class="list-search-input"
-                            autocomplete="off">
+                        <input type="search" id="watchlistSearch" name="watchlistSearch" placeholder="Listede ara..."
+                            class="list-search-input" autocomplete="off">
                     </div>
                 </div>
             </div>
@@ -199,33 +192,7 @@
         </section>
     </main>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-        <div class="modal-content glass">
-            <h2><i class="fas fa-cloud"></i> Bulut Ayarları</h2>
-            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 1.5rem;">Vercel'de cihazlar arası
-                senkronizasyon için Supabase bilgilerini girin.</p>
 
-            <div class="input-group">
-                <label>Supabase URL</label>
-                <input type="text" id="supabaseUrl" placeholder="https://xyz.supabase.co" autocomplete="off">
-            </div>
-            <div class="input-group">
-                <label>Supabase Anon Key</label>
-                <input type="password" id="supabaseKey" placeholder="eyJhbGciOiJIUzI1NiI..."
-                    autocomplete="new-password">
-            </div>
-
-            <div class="modal-actions">
-                <button id="saveCloudSettings" class="primary-btn">Kaydet</button>
-                <button id="closeSettingsModal" class="secondary-btn">Kapat</button>
-            </div>
-
-            <div style="margin-top: 1.5rem; font-size: 0.8rem; color: var(--text-muted);">
-                <p>Not: Yerel sunucu (server.js) açıksa dosyaya kayıt önceliklidir.</p>
-            </div>
-        </div>
-    </div>
 
 
 
