@@ -696,28 +696,51 @@ async function loadRecommendedMovies() {
 function setupInfiniteScroll() {
     const observerOptions = {
         root: null,
-        rootMargin: '0px 0px 1500px 0px', // Increased margin for faster loading
-        threshold: 0
+        rootMargin: '0px 0px 1800px 0px', // Large margin to pre-fetch early
+        threshold: [0, 0.1]
     };
 
-    const observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting && !recommendedState.isLoading && recommendedState.hasMore) {
+    const triggerLoading = () => {
+        if (!recommendedState.isLoading && recommendedState.hasMore) {
             const searchView = document.getElementById('searchView');
             if (searchView && searchView.classList.contains('active')) {
                 loadRecommendedMovies();
             }
         }
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+            triggerLoading();
+        }
     }, observerOptions);
 
     if (loadingIndicator) observer.observe(loadingIndicator);
 
-    // Initial check in case indicator is already visible
-    setTimeout(() => {
+    // Fallback: Throttled scroll listener to catch any missed observer triggers
+    let scrollTimeout;
+    window.addEventListener('scroll', () => {
+        if (!scrollTimeout) {
+            scrollTimeout = setTimeout(() => {
+                scrollTimeout = null;
+                const scrollPos = window.innerHeight + window.scrollY;
+                const threshold = document.documentElement.scrollHeight - 2000; // Trigger 2000px before end
+                if (scrollPos > threshold) {
+                    triggerLoading();
+                }
+            }, 200);
+        }
+    }, { passive: true });
+
+    // Periodical check to ensure we didn't get stuck (e.g. after container size change)
+    setInterval(() => {
         if (recommendedState.hasMore && !recommendedState.isLoading) {
             const rect = loadingIndicator.getBoundingClientRect();
-            if (rect.top < window.innerHeight) loadRecommendedMovies();
+            if (rect.top < window.innerHeight + 500) {
+                triggerLoading();
+            }
         }
-    }, 1000);
+    }, 2000);
 }
 
 
