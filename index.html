@@ -228,16 +228,13 @@
         <div class="player-content">
             <button class="close-player" onclick="closePlayer()"><i class="fas fa-times"></i></button>
             <div class="player-wrapper">
-                <div id="playerShield" class="player-shield" onclick="removeShield()">
-                    <div class="shield-content">
-                        <i class="fas fa-play"></i>
-                        <span>İzlemek için tıklayın</span>
-                    </div>
-                </div>
                 <iframe id="moviePlayer" src="" frameborder="0" allowfullscreen allow="autoplay; fullscreen"></iframe>
             </div>
             <div class="player-info" id="playerInfo">
                 <!-- Movie info will be here -->
+            </div>
+            <div class="player-footer" id="playerFooter">
+                <!-- Buttons will be injected here -->
             </div>
         </div>
     </div>

@@ -1524,11 +1524,9 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     const modal = document.getElementById('playerModal');
     const iframe = document.getElementById('moviePlayer');
     const playerInfo = document.getElementById('playerInfo');
-    const shield = document.getElementById('playerShield');
-
-    // Show modal and reset shield
+    const playerFooter = document.getElementById('playerFooter');
+    // Show modal
     modal.classList.add('active');
-    if (shield) shield.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 
     // Set embed URL
@@ -1541,10 +1539,15 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
         iframe.src = embedUrl;
     }
 
+    // Clear previous info
+    playerInfo.innerHTML = '<div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>';
+    playerFooter.innerHTML = '';
+
     // Fetch details for display in player
     try {
         const movie = await fetchItemDetails(id, mediaType);
         if (movie) {
+            movie.media_type = mediaType; // Ensure media_type is correct
             const title = movie.title || movie.name;
             const year = (movie.release_date || movie.first_air_date || '').split('-')[0];
             const rating = movie.vote_average?.toFixed(1);
@@ -1579,11 +1582,13 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
                 </div>
                 <div class="player-meta">
                     <span><i class="far fa-calendar"></i> ${year}</span>
-                    <span><i class="fas fa-star"></i> ${rating}</span>
-                    <span><i class="fas fa-video"></i> Full HD</span>
+                    <span><i class="fas fa-star" style="color:#f59e0b"></i> ${rating}</span>
+                    <span><i class="fas fa-closed-captioning"></i> TR Alt yazı & Dublaj</span>
                 </div>
                 <p class="player-overview">${overview}</p>
             `;
+
+            updateModalFooter(movie);
 
             if (mediaType === 'tv') {
                 loadEpisodes(id, season, episode);
@@ -1591,7 +1596,49 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
         }
     } catch (e) {
         console.error('Player info fetch error:', e);
+        playerInfo.innerHTML = '<p>Bilgiler yüklenirken bir hata oluştu.</p>';
     }
+};
+
+window.updateModalFooter = (movie) => {
+    const playerFooter = document.getElementById('playerFooter');
+    if (!playerFooter) return;
+
+    const isWatched = state.watched.find(m => m.id === movie.id);
+    const isWatchlist = state.watchlist.find(m => m.id === movie.id);
+
+    playerFooter.innerHTML = `
+        <button class="footer-btn watched-btn ${isWatched ? 'active' : ''}" 
+                onclick='handleModalWatched(${JSON.stringify(movie).replace(/'/g, "&#39;")})'>
+            <i class="fas ${isWatched ? 'fa-check-circle' : 'fa-check'}"></i>
+            <span>${isWatched ? 'İzlendi' : 'İzledim Yap'}</span>
+        </button>
+        <button class="footer-btn watchlist-btn ${isWatchlist ? 'active' : ''}" 
+                onclick='handleModalWatchlist(${JSON.stringify(movie).replace(/'/g, "&#39;")})'>
+            <i class="fas ${isWatchlist ? 'fa-bookmark' : 'fa-plus'}"></i>
+            <span>${isWatchlist ? 'Listede' : 'İzlenecekler'}</span>
+        </button>
+    `;
+};
+
+window.handleModalWatched = async (movie) => {
+    const isWatched = state.watched.find(m => m.id === movie.id);
+    if (isWatched) {
+        removeFromWatched(movie.id);
+    } else {
+        await addToWatched(movie);
+    }
+    updateModalFooter(movie);
+};
+
+window.handleModalWatchlist = async (movie) => {
+    const isWatchlist = state.watchlist.find(m => m.id === movie.id);
+    if (isWatchlist) {
+        removeFromWatchlist(movie.id);
+    } else {
+        await addToWatchlist(movie);
+    }
+    updateModalFooter(movie);
 };
 
 window.loadEpisodes = async (id, seasonNumber, currentEpisode = 1) => {
@@ -1625,12 +1672,7 @@ window.closePlayer = () => {
     document.body.style.overflow = '';
 };
 
-window.removeShield = () => {
-    const shield = document.getElementById('playerShield');
-    if (shield) {
-        shield.classList.add('hidden');
-    }
-};
+
 
 // --- Event Listeners ---
 function setupEventListeners() {

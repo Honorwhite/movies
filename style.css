@@ -1906,20 +1906,24 @@ body {
     box-shadow: 0 15px 30px rgba(99, 102, 241, 0.3);
 }
 
+/* --- Premium Player Modal Design --- */
+/* --- Responsive Player Modal (Optimized for PC & Mobile) --- */
+/* --- Responsive Player Modal (Optimized for PC & Mobile) --- */
 .player-modal {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.9);
-    backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
     z-index: 3000;
     display: none;
     align-items: center;
     justify-content: center;
     opacity: 0;
-    transition: var(--transition);
+    transition: opacity 0.5s ease;
 }
 
 .player-modal.active {
@@ -1927,40 +1931,22 @@ body {
     opacity: 1;
 }
 
-.player-content {
-    width: 95%;
-    max-width: 1200px;
-    height: 90vh;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    background: #0f172a;
-    border-radius: 32px;
-    overflow: hidden;
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
-    transform: translateY(20px) scale(0.95);
-    transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.player-modal.active .player-content {
-    transform: translateY(0) scale(1);
-}
-
+/* Common Components */
 .close-player {
     position: absolute;
     top: 20px;
     right: 20px;
-    width: 50px;
-    height: 50px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
-    font-size: 1.5rem;
+    font-size: 1.2rem;
     cursor: pointer;
-    z-index: 10;
-    transition: var(--transition);
+    z-index: 1000;
+    transition: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1968,157 +1954,182 @@ body {
 
 .close-player:hover {
     background: var(--accent-bad);
-    transform: rotate(90deg);
-}
-
-.player-wrapper {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    background: #000;
-    border-radius: 24px;
-    overflow: hidden;
-    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.player-shield {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(8px);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.player-shield.hidden {
-    opacity: 0;
-    pointer-events: none;
-    backdrop-filter: blur(0px);
-}
-
-.shield-content {
-    text-align: center;
-    color: white;
-    transform: translateY(0);
-    transition: var(--transition);
-}
-
-.shield-content i {
-    font-size: 4.5rem;
-    margin-bottom: 1.5rem;
-    color: white;
-    filter: drop-shadow(0 0 30px rgba(99, 102, 241, 0.6));
-    transition: all 0.4s ease;
-}
-
-.player-shield:hover .shield-content i {
-    transform: scale(1.15) rotate(5deg);
-    color: var(--primary);
-}
-
-.shield-content span {
-    display: block;
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    opacity: 0.9;
+    transform: rotate(90deg) scale(1.1);
 }
 
 .player-wrapper iframe {
-    position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
     border: none;
 }
 
-.player-info {
-    padding: 2.5rem;
-    background: linear-gradient(to top, #070b14, #0f172a);
-    max-height: 350px;
-    overflow-y: auto;
-}
-
-.player-info-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 2rem;
-    margin-bottom: 1rem;
-    flex-wrap: wrap;
-}
-
 .player-info h2 {
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 800;
-    background: linear-gradient(to right, #fff, var(--primary));
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    flex: 1;
-    min-width: 300px;
+    color: white;
+    margin-bottom: 0.8rem;
+    letter-spacing: -1.2px;
+    line-height: 1.2;
 }
 
+.player-overview {
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* PC Design: Side-by-Side */
+@media (min-width: 1024px) {
+    .player-content {
+        display: grid;
+        grid-template-columns: 1.6fr 1.15fr;
+        grid-template-areas: "video side";
+        width: 96%;
+        max-width: 1440px;
+        height: 82vh;
+        background: #0f172a;
+        border-radius: 40px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 50px 100px rgba(0, 0, 0, 0.9);
+    }
+
+    .player-wrapper {
+        grid-area: video;
+        height: 100%;
+        background: black;
+        display: flex;
+        align-items: center;
+    }
+
+    .player-info {
+        padding: 2.5rem;
+        overflow-y: auto;
+        grid-column: 2;
+        grid-row: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .player-footer {
+        padding: 1.8rem 2.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+        background: rgba(0, 0, 0, 0.25);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        grid-column: 2;
+        grid-row: 2;
+    }
+
+    .footer-btn {
+        max-width: none !important;
+    }
+}
+
+/* Tablet & Mobile Design: Stacked */
+@media (max-width: 1023px) {
+    .player-content {
+        width: 95%;
+        max-width: 600px;
+        height: 92vh;
+        display: flex;
+        flex-direction: column;
+        background: #0f172a;
+        border-radius: 32px;
+        overflow-y: auto;
+    }
+
+    .player-wrapper {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        flex-shrink: 0;
+    }
+
+    .player-info {
+        padding: 1.5rem;
+    }
+
+    .player-footer {
+        padding: 1rem 1.5rem;
+        display: flex;
+        gap: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+.footer-btn {
+    flex: 1;
+    height: 54px;
+    border-radius: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.footer-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.footer-btn.active.watched-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border: none;
+    box-shadow: 0 10px 20px rgba(16, 185, 129, 0.3);
+}
+
+.footer-btn.active.watchlist-btn {
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    border: none;
+    box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+}
+
+/* TV Selectors */
 .tv-selectors {
     display: flex;
-    gap: 1.5rem;
+    gap: 1rem;
+    margin: 0.5rem 0 1rem;
 }
 
 .selector-group {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .selector-group label {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 800;
+    color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: var(--text-dim);
 }
 
 .selector-group select {
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
-    border-radius: 12px;
-    padding: 0.6rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: white;
-    font-family: inherit;
-    font-weight: 600;
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
     outline: none;
+    font-weight: 600;
     cursor: pointer;
-    transition: var(--transition);
+    transition: all 0.3s ease;
 }
 
 .selector-group select:hover {
     background: rgba(255, 255, 255, 0.1);
     border-color: var(--primary);
-}
-
-.player-meta {
-    display: flex;
-    gap: 1.5rem;
-    margin-bottom: 1rem;
-    color: var(--text-muted);
-    font-weight: 600;
-    font-size: 0.9rem;
-}
-
-.player-overview {
-    color: var(--text-dim);
-    line-height: 1.6;
-    font-size: 1rem;
 }
 
 /* TV Card Stacked Look */
