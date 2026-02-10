@@ -14,6 +14,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+    self.skipWaiting(); // Force the waiting service worker to become the active service worker
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
             return cache.addAll(ASSETS);
@@ -23,27 +24,35 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cacheName) => {
-                    if (cacheName !== CACHE_NAME) {
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        })
+        Promise.all([
+            self.clients.claim(), // Take control of all pages immediately
+            caches.keys().then((cacheNames) => {
+                return Promise.all(
+                    cacheNames.map((cacheName) => {
+                        if (cacheName !== CACHE_NAME) {
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            })
+        ])
     );
 });
 
 self.addEventListener('fetch', (event) => {
-    // Skip caching for API/External calls
-    if (event.request.url.includes('api.themoviedb.org') || event.request.url.includes('supabase.co')) {
-        return fetch(event.request);
+    const url = event.request.url;
+
+    // Do NOT call respondWith for localhost, TMDB, or Supabase
+    // This allows the browser to handle these requests normally (including connection errors)
+    if (url.includes('localhost') || url.includes('127.0.0.1') || url.includes('api.themoviedb.org') || url.includes('supabase.co')) {
+        return;
     }
 
     event.respondWith(
-        fetch(event.request).catch(() => {
-            return caches.match(event.request);
-        })
+        fetch(event.request)
+            .catch(() => caches.match(event.request))
+            .then((response) => {
+                return response || new Response('Offline', { status: 404 });
+            })
     );
 });

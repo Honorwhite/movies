@@ -149,18 +149,12 @@ async function fetchUsersFromCloud() {
     let localUsers = [];
     try { localUsers = JSON.parse(rawLocal) || []; } catch (e) { }
 
-    // Start with all currently known users (including the one just registered)
     let mergedUsers = [...localUsers];
 
-    // Ensure default users are always present and have correct passwords
     DEFAULT_USERS.forEach(def => {
         const idx = mergedUsers.findIndex(u => u.username === def.username);
-        if (idx === -1) {
-            mergedUsers.push(def);
-        } else {
-            // Overwrite password/avatar with defaults for Onur/Cemrik
-            mergedUsers[idx] = { ...mergedUsers[idx], ...def };
-        }
+        if (idx === -1) mergedUsers.push(def);
+        else mergedUsers[idx] = { ...mergedUsers[idx], ...def };
     });
 
     if (!state.cloudSettings.url || !state.cloudSettings.key) {
@@ -170,7 +164,8 @@ async function fetchUsersFromCloud() {
     }
 
     try {
-        const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_users?select=*`, {
+        // Use existing movie_tracker table with a special ID for all users
+        const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker?id=eq.system_users`, {
             headers: {
                 'apikey': state.cloudSettings.key,
                 'Authorization': `Bearer ${state.cloudSettings.key}`
@@ -178,37 +173,36 @@ async function fetchUsersFromCloud() {
         });
 
         if (response.ok) {
-            const cloudData = await response.json();
+            const data = await response.json();
+            if (data.length > 0) {
+                const cloudUsers = data[0].content.users || [];
 
-            // Merge cloud users into our local list
-            cloudData.forEach(cu => {
-                const idx = mergedUsers.findIndex(u => u.username === cu.username);
-                if (idx === -1) {
-                    mergedUsers.push(cu);
-                } else {
-                    // Update existing with cloud data (but don't overwrite fixed passwords of defaults)
-                    const isDefault = DEFAULT_USERS.some(d => d.username === cu.username);
-                    if (!isDefault) {
-                        mergedUsers[idx] = { ...mergedUsers[idx], ...cu };
+                cloudUsers.forEach(cu => {
+                    const idx = mergedUsers.findIndex(u => u.username === cu.username);
+                    if (idx === -1) {
+                        mergedUsers.push(cu);
+                    } else {
+                        const isDefault = DEFAULT_USERS.some(d => d.username === cu.username);
+                        if (!isDefault) mergedUsers[idx] = { ...mergedUsers[idx], ...cu };
                     }
-                }
-            });
-
+                });
+            } else {
+                // First time setup: Push local/default users to cloud
+                await saveAllUsersToCloud(mergedUsers);
+            }
             state.users = mergedUsers;
             localStorage.setItem('ct_users', JSON.stringify(state.users));
-        } else {
-            state.users = mergedUsers;
         }
     } catch (e) {
-        console.error('Bulut senkronizasyon hatası:', e);
+        console.error('Kullanıcı senkronizasyon hatası:', e);
         state.users = mergedUsers;
     }
 }
 
-async function saveUserToCloud(userObj) {
+async function saveAllUsersToCloud(usersList) {
     if (!state.cloudSettings.url || !state.cloudSettings.key) return;
     try {
-        await fetch(`${state.cloudSettings.url}/rest/v1/movie_users`, {
+        await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker`, {
             method: 'POST',
             headers: {
                 'apikey': state.cloudSettings.key,
@@ -216,10 +210,13 @@ async function saveUserToCloud(userObj) {
                 'Content-Type': 'application/json',
                 'Prefer': 'resolution=merge-duplicates'
             },
-            body: JSON.stringify(userObj)
+            body: JSON.stringify({
+                id: 'system_users',
+                content: { users: usersList, lastUpdated: new Date().getTime() }
+            })
         });
     } catch (e) {
-        console.error('Kullanıcı buluta kaydedilemedi:', e);
+        console.error('Kullanıcı listesi buluta kaydedilemedi:', e);
     }
 }
 
@@ -365,25 +362,62 @@ window.handleRegister = async () => {
 
     const newUser = { username: user, password: pass, avatar: 'fas fa-user-circle' };
     state.users.push(newUser);
-    await saveUserToCloud(newUser);
+    await saveAllUsersToCloud(state.users);
     localStorage.setItem('ct_users', JSON.stringify(state.users));
 
     alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
     showLogin();
 };
 
-window.switchUser = () => {
-    state.currentUser = null;
-    localStorage.removeItem('active_user');
-    document.documentElement.classList.remove('user-logged-in');
-    location.reload(); // Simplest way to reset everything
+window.openProfile = () => {
+    // With full-page navigation, this function now primarily ensures the name is updated.
+    // The actual view change is handled by setupEventListeners.
+    if (!state.currentUser) return;
+    const nameSpan = document.getElementById('profileDisplayName');
+    if (nameSpan) {
+        nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
+    }
 };
 
+
+window.changePassword = async () => {
+    const newPass = document.getElementById('newPassword').value.trim();
+    const msgDiv = document.getElementById('profileMsg');
+
+    if (newPass.length < 3) {
+        msgDiv.textContent = 'Şifre en az 3 karakter olmalıdır.';
+        msgDiv.style.color = 'var(--accent-bad)';
+        msgDiv.style.display = 'block';
+        return;
+    }
+
+    const userIdx = state.users.findIndex(u => u.username === state.currentUser);
+    if (userIdx !== -1) {
+        state.users[userIdx].password = newPass;
+        localStorage.setItem('ct_users', JSON.stringify(state.users));
+        await saveAllUsersToCloud(state.users);
+
+        msgDiv.textContent = 'Şifre başarıyla güncellendi!';
+        msgDiv.style.color = 'var(--accent-good)';
+        msgDiv.style.display = 'block';
+        document.getElementById('newPassword').value = '';
+        setTimeout(() => {
+            msgDiv.style.display = 'none';
+        }, 3000);
+    }
+};
+
+window.logout = () => {
+    localStorage.removeItem('active_user');
+    location.reload();
+};
+
+window.switchUser = () => logout();
 
 async function checkLocalServer() {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000); // 1 saniye timeout
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
 
         const response = await fetch(LOCAL_URL, {
             method: 'GET',
@@ -1159,11 +1193,11 @@ function createMovieCard(movie, context) {
         </div>
         <div class="card-actions">
             ${context === 'search' || context === 'recommended' ? `
-                <button class="action-btn watched-btn ${isWatched ? 'is-added' : ''}" 
+                <button class="action-btn watched-btn ${isWatched ? 'is-added' : ''}"
                         onclick="${isWatched ? '' : `addToWatched(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
                     <i class="fas fa-check"></i> <span>${isWatched ? 'İzlendi' : 'İzledim'}</span>
                 </button>
-                <button class="action-btn watchlist-btn ${isWatchlist ? 'is-added' : ''}" 
+                <button class="action-btn watchlist-btn ${isWatchlist ? 'is-added' : ''}"
                         onclick="${isWatchlist ? '' : `addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
                     <i class="fas fa-plus"></i> <span class="btn-text">${isWatchlist ? 'Listede' : 'İzlenecek'}</span>
                 </button>
@@ -1173,7 +1207,7 @@ function createMovieCard(movie, context) {
                     </button>
                 ` : ''}
             ` : ''}
-            
+
             ${context === 'watchlist' ? `
                 <button class="action-btn watched-btn" onclick="addToWatched(${JSON.stringify(movie).replace(/"/g, '&quot;')})">
                     <i class="fas fa-check"></i> <span>İzledim</span>
@@ -1595,12 +1629,22 @@ function setupEventListeners() {
     navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const viewId = btn.getAttribute('data-view');
+
             navBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            views.forEach(v => v.classList.remove('active'));
-            document.getElementById(`${viewId}View`).classList.add('active');
-            window.scrollTo(0, 0);
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            const targetView = document.getElementById(viewId + 'View');
+            if (targetView) targetView.classList.add('active');
+
+            if (viewId === 'profile') {
+                const nameSpan = document.getElementById('profileDisplayName');
+                if (nameSpan && state.currentUser) {
+                    nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
+                }
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
 
             if (viewId === 'search') {
                 updateHeroSection();

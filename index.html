@@ -58,7 +58,7 @@
                 <i class="fas fa-bookmark"></i>
                 <span>İzlenecekler</span>
             </button>
-            <button class="nav-btn user-profile-btn" onclick="switchUser()" title="Kullanıcı Değiştir">
+            <button class="nav-btn user-profile-btn" data-view="profile" title="Profil">
                 <i class="fas fa-user-circle"></i>
                 <span id="activeUserName">Yükleniyor...</span>
             </button>
@@ -73,8 +73,13 @@
                 <div class="hero-content">
                     <h1>Yeni Bir Şeyler Keşfedin</h1>
                     <div class="search-bar-container">
-                        <input type="search" id="movieSearch" name="movieSearch" placeholder="Film veya dizi arayın..."
-                            autocomplete="off" spellcheck="false">
+                        <!-- Dummy hidden fields to catch aggressive browser autofill -->
+                        <input type="text" style="display:none;" name="fake_username_remembered" />
+                        <input type="password" style="display:none;" name="fake_password_remembered" />
+
+                        <input type="text" id="movieSearch" name="never_save_this_field"
+                            placeholder="Film veya dizi arayın..." autocomplete="new-password" data-lpignore="true"
+                            spellcheck="false">
                         <button id="searchBtn"><i class="fas fa-search"></i></button>
                     </div>
                     <div id="heroMovieInfo" class="hero-movie-info">
@@ -184,6 +189,40 @@
                 <!-- Watchlist movies will be injected here -->
             </div>
         </section>
+
+        <!-- Profile View -->
+        <section id="profileView" class="view">
+            <div class="view-header">
+                <h2>Profil Ayarları</h2>
+            </div>
+
+            <div class="profile-container">
+                <div class="profile-card glass">
+                    <div class="profile-header-main">
+                        <div class="profile-avatar"><i class="fas fa-user-circle"></i></div>
+                        <h3 id="profileDisplayName">Kullanıcı Adı</h3>
+                        <p class="profile-status">Aktif Oturum</p>
+                    </div>
+
+                    <div class="profile-section">
+                        <h4>Şifre Değiştir</h4>
+                        <div class="auth-form">
+                            <div class="input-group">
+                                <input type="password" id="newPassword" placeholder="Yeni Şifre">
+                            </div>
+                            <div id="profileMsg" style="font-size: 0.8rem; margin-top: -0.5rem; display: none;"></div>
+                            <button class="primary-btn" onclick="changePassword()">Şifreyi Güncelle</button>
+                        </div>
+                    </div>
+
+                    <div class="profile-section logout-section">
+                        <button class="secondary-btn logout-full-btn" onclick="logout()">
+                            <i class="fas fa-sign-out-alt"></i> Oturumu Kapat
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
     </main>
     <div id="playerModal" class="player-modal">
         <div class="player-content">
@@ -196,6 +235,8 @@
             </div>
         </div>
     </div>
+
+
 
     <button id="scrollTopBtn" class="scroll-top-btn" title="Yukarı Çık">
         <i class="fas fa-arrow-up"></i>
