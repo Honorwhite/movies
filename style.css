@@ -154,12 +154,13 @@ body {
     width: 600px;
     height: 600px;
     border-radius: 50%;
-    opacity: 0.1;
-    filter: blur(60px);
-    /* Reduced from 80px */
-    animation: move 30s infinite cubic-bezier(0.4, 0, 0.2, 1) alternate;
-    transform: translateZ(0);
+    opacity: 0.05;
+    /* Even slower and lighter for PC fluidity */
+    background: radial-gradient(circle at center, var(--primary) 0%, transparent 75%);
+    animation: move 80s infinite linear alternate;
+    transform: translate3d(0, 0, 0);
     will-change: transform;
+    pointer-events: none;
 }
 
 /* Disable heavy blobs on mobile to prevent overheating */
@@ -170,23 +171,23 @@ body {
 }
 
 .blob-1 {
-    background: radial-gradient(circle, var(--primary), transparent);
-    top: -200px;
-    left: -100px;
+    background: radial-gradient(circle at center, var(--primary), transparent);
+    top: -300px;
+    left: -200px;
 }
 
 .blob-2 {
-    background: radial-gradient(circle, var(--secondary), transparent);
-    bottom: -200px;
-    right: -100px;
-    animation-delay: -7s;
+    background: radial-gradient(circle at center, var(--secondary), transparent);
+    bottom: -300px;
+    right: -200px;
+    animation-delay: -10s;
 }
 
 .blob-3 {
-    background: radial-gradient(circle, var(--accent), transparent);
-    top: 30%;
-    left: 40%;
-    animation-delay: -15s;
+    background: radial-gradient(circle at center, var(--accent), transparent);
+    top: 20%;
+    left: 30%;
+    animation-delay: -20s;
 }
 
 @keyframes move {
@@ -226,12 +227,13 @@ body {
     justify-content: space-between;
     align-items: center;
     background: rgba(15, 23, 42, 0.85);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    /* Reduce backdrop-blur on PC for better scrolling performance */
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     z-index: 1000;
     border-radius: 24px;
     border: 1px solid var(--glass-border);
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
 }
 
 .logo {
@@ -413,8 +415,14 @@ body {
     background-position: center;
     opacity: 0;
     transition: opacity 1.2s ease-out, var(--transition);
-    mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+}
+
+.hero-backdrop::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 0%, rgba(7, 11, 20, 0.8) 50%, #070b14 100%);
+    z-index: 1;
 }
 
 .hero-backdrop::after {
@@ -514,11 +522,9 @@ body {
 
 .hero-btn {
     padding: 1rem 2rem;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(15px);
-    -webkit-backdrop-filter: blur(15px);
+    background: rgba(255, 255, 255, 0.1);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 100px;
     font-size: 1rem;
     font-weight: 700;
@@ -586,13 +592,11 @@ body {
     margin: 0 auto;
     position: relative;
     padding: 8px;
-    background: rgba(15, 23, 42, 0.8);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    background: rgba(15, 23, 42, 0.9);
     border-radius: 100px;
-    border: 2px solid rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.1);
     transition: var(--transition);
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 20px rgba(99, 102, 241, 0.1);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
 }
 
 .search-bar-container:focus-within {
@@ -1017,9 +1021,9 @@ body {
 }
 
 .movie-card:hover {
-    transform: translateY(-10px) scale(1.02);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 20px rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.4);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+    border-color: rgba(99, 102, 241, 0.3);
 }
 
 .poster-container {
@@ -1229,8 +1233,7 @@ body {
     width: 36px;
     height: 36px;
     border-radius: 12px;
-    background: rgba(7, 11, 20, 0.6);
-    backdrop-filter: blur(8px);
+    background: rgba(7, 11, 20, 0.85);
     border: 1px solid var(--glass-border);
     color: white;
     z-index: 10;
