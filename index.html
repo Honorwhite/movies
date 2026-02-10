@@ -22,17 +22,11 @@
 
 <body>
     <div id="userSelectionOverlay" class="user-selection-overlay">
-        <div class="user-selection-content glass">
-            <h2>Kullanıcı Seçin</h2>
-            <div class="user-cards">
-                <div class="user-card" onclick="selectUser('onur')">
-                    <div class="user-avatar"><i class="fas fa-user-ninja"></i></div>
-                    <span>Onur</span>
-                </div>
-                <div class="user-card" onclick="selectUser('cemrik')">
-                    <div class="user-avatar"><i class="fas fa-user-astronaut"></i></div>
-                    <span>Cemrik</span>
-                </div>
+        <div class="user-selection-content glass" id="authContainer">
+            <!-- Content will be populated by script.js (showLogin/showRegister) -->
+            <div class="loading-spinner">
+                <i class="fas fa-circle-notch fa-spin"></i>
+                <p>Yükleniyor...</p>
             </div>
         </div>
     </div>
@@ -191,10 +185,17 @@
             </div>
         </section>
     </main>
-
-
-
-
+    <div id="playerModal" class="player-modal">
+        <div class="player-content">
+            <button class="close-player" onclick="closePlayer()"><i class="fas fa-times"></i></button>
+            <div class="player-wrapper">
+                <iframe id="moviePlayer" src="" frameborder="0" allowfullscreen></iframe>
+            </div>
+            <div class="player-info" id="playerInfo">
+                <!-- Movie info will be here -->
+            </div>
+        </div>
+    </div>
 
     <button id="scrollTopBtn" class="scroll-top-btn" title="Yukarı Çık">
         <i class="fas fa-arrow-up"></i>

@@ -17,8 +17,15 @@ let state = {
         url: 'https://gbdqycgclxhblhhjhpbm.supabase.co',
         key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
     },
-    ignored: []
+    ignored: [],
+    users: [] // Stores {username, password, avatar}
 };
+
+// Default users with hidden credentials for the user to see in response
+const DEFAULT_USERS = [
+    { username: 'onur', password: 'onur123', avatar: 'fas fa-user-ninja' },
+    { username: 'cemrik', password: 'cemrik123', avatar: 'fas fa-user-astronaut' }
+];
 
 // --- DOM Elements ---
 const navBtns = document.querySelectorAll('.nav-btn');
@@ -83,6 +90,13 @@ const watchlistGenreChips = document.getElementById('watchlistGenreChips');
 
 // --- Initialization ---
 async function init() {
+    try {
+        // 1. Fetch all users from cloud first
+        await fetchUsersFromCloud();
+    } catch (e) {
+        console.error('Initial user fetch failed, continuing with local storage:', e);
+    }
+
     // Reset states for the new user
     recommendedState = {
         page: 1,
@@ -104,31 +118,23 @@ async function init() {
 
     // Check for saved user session
     const savedUser = localStorage.getItem('active_user');
-    if (savedUser && !state.currentUser) {
+    if (savedUser) {
         state.currentUser = savedUser;
-    }
-
-    if (!state.currentUser) {
-        document.getElementById('userSelectionOverlay').style.display = 'flex';
-        document.getElementById('userSelectionOverlay').style.opacity = '1';
-        return;
-    } else {
+        document.documentElement.classList.add('user-logged-in');
         document.getElementById('userSelectionOverlay').style.display = 'none';
         const nameSpan = document.getElementById('activeUserName');
         if (nameSpan) nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
+
+        updateHeroSection();
+        await loadStateFromCloud();
+        renderLists();
+        initGenres();
+        loadRecommendedMovies();
+    } else {
+        setTimeout(showLogin, 100); // Tiny delay to ensure DOM is ready
     }
 
-
-
-    updateHeroSection(); // Move to top for faster loading
-    await loadStateFromCloud();
-    renderLists();
-
-    // Load initial recommended movies
-    initGenres();
-    loadRecommendedMovies();
-
-    // Register PWA Service Worker
+    // Register PWA Service Worker (Optional: remove if it causes fetch errors)
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
@@ -138,33 +144,232 @@ async function init() {
     }
 }
 
-window.selectUser = async (username) => {
-    state.currentUser = username;
-    localStorage.setItem('active_user', username);
+async function fetchUsersFromCloud() {
+    const rawLocal = localStorage.getItem('ct_users');
+    let localUsers = [];
+    try { localUsers = JSON.parse(rawLocal) || []; } catch (e) { }
 
-    // Migrate old data for Onur if it exists and new format doesn't
-    if (username === 'onur' && !localStorage.getItem('user_onur_watched_list')) {
-        const oldWatched = localStorage.getItem('watched_list');
-        const oldWatchlist = localStorage.getItem('watchlist_list');
-        const oldIgnored = localStorage.getItem('ignored_list');
-        const oldUpdated = localStorage.getItem('last_updated');
+    // Start with all currently known users (including the one just registered)
+    let mergedUsers = [...localUsers];
 
-        if (oldWatched) localStorage.setItem('user_onur_watched_list', oldWatched);
-        if (oldWatchlist) localStorage.setItem('user_onur_watchlist_list', oldWatchlist);
-        if (oldIgnored) localStorage.setItem('user_onur_ignored_list', oldIgnored);
-        if (oldUpdated) localStorage.setItem('user_onur_last_updated', oldUpdated);
+    // Ensure default users are always present and have correct passwords
+    DEFAULT_USERS.forEach(def => {
+        const idx = mergedUsers.findIndex(u => u.username === def.username);
+        if (idx === -1) {
+            mergedUsers.push(def);
+        } else {
+            // Overwrite password/avatar with defaults for Onur/Cemrik
+            mergedUsers[idx] = { ...mergedUsers[idx], ...def };
+        }
+    });
+
+    if (!state.cloudSettings.url || !state.cloudSettings.key) {
+        state.users = mergedUsers;
+        localStorage.setItem('ct_users', JSON.stringify(state.users));
+        return;
     }
 
-    document.getElementById('userSelectionOverlay').style.opacity = '1';
-    document.getElementById('userSelectionOverlay').style.display = 'flex';
+    try {
+        const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_users?select=*`, {
+            headers: {
+                'apikey': state.cloudSettings.key,
+                'Authorization': `Bearer ${state.cloudSettings.key}`
+            }
+        });
 
-    setTimeout(() => {
-        document.getElementById('userSelectionOverlay').style.opacity = '0';
+        if (response.ok) {
+            const cloudData = await response.json();
+
+            // Merge cloud users into our local list
+            cloudData.forEach(cu => {
+                const idx = mergedUsers.findIndex(u => u.username === cu.username);
+                if (idx === -1) {
+                    mergedUsers.push(cu);
+                } else {
+                    // Update existing with cloud data (but don't overwrite fixed passwords of defaults)
+                    const isDefault = DEFAULT_USERS.some(d => d.username === cu.username);
+                    if (!isDefault) {
+                        mergedUsers[idx] = { ...mergedUsers[idx], ...cu };
+                    }
+                }
+            });
+
+            state.users = mergedUsers;
+            localStorage.setItem('ct_users', JSON.stringify(state.users));
+        } else {
+            state.users = mergedUsers;
+        }
+    } catch (e) {
+        console.error('Bulut senkronizasyon hatası:', e);
+        state.users = mergedUsers;
+    }
+}
+
+async function saveUserToCloud(userObj) {
+    if (!state.cloudSettings.url || !state.cloudSettings.key) return;
+    try {
+        await fetch(`${state.cloudSettings.url}/rest/v1/movie_users`, {
+            method: 'POST',
+            headers: {
+                'apikey': state.cloudSettings.key,
+                'Authorization': `Bearer ${state.cloudSettings.key}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify(userObj)
+        });
+    } catch (e) {
+        console.error('Kullanıcı buluta kaydedilemedi:', e);
+    }
+}
+
+window.showLogin = () => {
+    const overlay = document.getElementById('userSelectionOverlay');
+    overlay.innerHTML = `
+        <div class="user-selection-content glass">
+            <h2>Giriş Yap</h2>
+            <div class="auth-form">
+                <div class="input-group">
+                    <input type="text" id="loginUsername" placeholder="Kullanıcı Adı" autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="loginPassword" placeholder="Şifre" autocomplete="current-password">
+                </div>
+                <div id="authError" style="color: var(--accent-bad); font-size: 0.8rem; display: none; margin-top: -0.5rem; margin-bottom: 0.5rem;"></div>
+                <div class="auth-actions">
+                    <button class="primary-btn" id="loginBtn" onclick="handleLogin()">Giriş</button>
+                    <button class="secondary-btn" onclick="showRegister()">Hesap Oluştur</button>
+                </div>
+            </div>
+        </div>
+    `;
+    overlay.style.display = 'flex';
+    overlay.style.opacity = '1';
+
+    // Enter key support
+    const inputs = overlay.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
+        });
+    });
+};
+
+window.showRegister = () => {
+    const overlay = document.getElementById('userSelectionOverlay');
+    overlay.innerHTML = `
+        <div class="user-selection-content glass">
+            <h2>Hesap Oluştur</h2>
+            <div class="auth-form">
+                <div class="input-group">
+                    <input type="text" id="regUsername" placeholder="Kullanıcı Adı">
+                </div>
+                <div class="input-group">
+                    <input type="password" id="regPassword" placeholder="Şifre">
+                </div>
+                <div id="authError" style="color: var(--accent-bad); font-size: 0.8rem; display: none; margin-top: -0.5rem; margin-bottom: 0.5rem;"></div>
+                <div class="auth-actions">
+                    <button class="primary-btn" id="regBtn" onclick="handleRegister()">Kayıt Ol</button>
+                    <button class="secondary-btn" onclick="showLogin()">Giriş'e Dön</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Enter key support
+    const inputs = overlay.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleRegister();
+        });
+    });
+};
+
+window.quickLogin = (username, password) => {
+    document.getElementById('loginUsername').value = username;
+    document.getElementById('loginPassword').value = password;
+    handleLogin();
+};
+
+window.handleLogin = async () => {
+    const userField = document.getElementById('loginUsername');
+    const passField = document.getElementById('loginPassword');
+    const loginBtn = document.getElementById('loginBtn');
+    const errorDiv = document.getElementById('authError');
+
+    const username = userField.value.toLowerCase().trim();
+    const password = passField.value;
+
+    if (!username || !password) return;
+
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Giriş Yapılıyor...';
+    errorDiv.style.display = 'none';
+
+    // Re-verify users
+    await fetchUsersFromCloud();
+
+    // Failsafe: check both state.users (cloud/local) AND DEFAULT_USERS directly
+    const found = state.users.find(u => u.username === username && u.password === password) ||
+        DEFAULT_USERS.find(u => u.username === username && u.password === password);
+
+    console.log('Login denemesi:', username, 'Bulundu mu:', !!found);
+
+    if (found) {
+        state.currentUser = username;
+        localStorage.setItem('active_user', username);
+        document.documentElement.classList.add('user-logged-in');
+
+        const overlay = document.getElementById('userSelectionOverlay');
+        overlay.style.opacity = '0';
         setTimeout(() => {
-            document.getElementById('userSelectionOverlay').style.display = 'none';
-            init(); // Re-run init with user
+            overlay.style.display = 'none';
+            init();
         }, 300);
-    }, 10);
+    } else {
+        errorDiv.innerHTML = `Hatalı kullanıcı adı veya şifre!<br><span style="font-size:0.7rem; opacity:0.7; cursor:pointer;" onclick="location.reload(true)">Sorun mu var? Sayfayı Zorla Yenile</span>`;
+        errorDiv.style.display = 'block';
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Giriş';
+    }
+};
+
+window.handleRegister = async () => {
+    const userField = document.getElementById('regUsername');
+    const passField = document.getElementById('regPassword');
+    const regBtn = document.getElementById('regBtn');
+    const errorDiv = document.getElementById('authError');
+
+    const user = userField.value.trim().toLowerCase();
+    const pass = passField.value.trim();
+
+    if (user.length < 3 || pass.length < 3) {
+        errorDiv.textContent = 'En az 3 karakter olmalıdır.';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    regBtn.disabled = true;
+    regBtn.textContent = 'Kayıt Yapılıyor...';
+    errorDiv.style.display = 'none';
+
+    await fetchUsersFromCloud();
+
+    if (state.users.find(u => u.username === user)) {
+        errorDiv.textContent = 'Bu kullanıcı adı zaten alınmış.';
+        errorDiv.style.display = 'block';
+        regBtn.disabled = false;
+        regBtn.textContent = 'Kayıt Ol';
+        return;
+    }
+
+    const newUser = { username: user, password: pass, avatar: 'fas fa-user-circle' };
+    state.users.push(newUser);
+    await saveUserToCloud(newUser);
+    localStorage.setItem('ct_users', JSON.stringify(state.users));
+
+    alert('Kayıt başarılı! Şimdi giriş yapabilirsiniz.');
+    showLogin();
 };
 
 window.switchUser = () => {
@@ -576,82 +781,108 @@ async function loadRecommendedMovies() {
     loadingIndicator.classList.add('active');
 
     try {
+        let allItems = [];
         let genreId = recommendedState.selectedGenre;
 
-        // If no genre selected, pick one from user's favorites randomly for variety
-        if (!genreId && state.watched.length > 0) {
+        // --- PERSONALIZATION LOGIC ---
+        if (!genreId && state.watched.length > 0 && recommendedState.page === 1) {
+            // 1. Get recommendations based on recently watched items (Top 3 recent)
+            const recentItems = state.watched.slice(-3).reverse();
+            const recPromises = recentItems.map(item =>
+                fetch(`https://api.themoviedb.org/3/${item.media_type || 'movie'}/${item.id}/recommendations?api_key=${TMDB_API_KEY}&language=en-US&page=1`)
+                    .then(res => res.json())
+                    .catch(() => ({ results: [] }))
+            );
+
+            const recResults = await Promise.all(recPromises);
+            recResults.forEach((resp, idx) => {
+                if (resp.results) {
+                    resp.results.forEach(m => {
+                        m.media_type = recentItems[idx].media_type || 'movie';
+                        m._rec_score = 10; // High priority for direct recommendations
+                    });
+                    allItems.push(...resp.results);
+                }
+            });
+        }
+
+        // 2. Fallback or Supplementary Discovery based on top genres
+        if (allItems.length < 20 || genreId) {
             const genreCounts = {};
             state.watched.forEach(m => {
                 const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
-                ids.forEach(id => {
-                    genreCounts[id] = (genreCounts[id] || 0) + 1;
-                });
+                ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
             });
 
             const topGenres = Object.entries(genreCounts)
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 3) // Narrower pool for better personalization
+                .slice(0, 3)
                 .map(e => e[0]);
 
-            // Higher probability of personalization (85%)
-            if (topGenres.length > 0 && Math.random() > 0.15) {
-                genreId = topGenres[Math.floor(Math.random() * topGenres.length)];
-                console.log(`[${state.currentUser}] Personalizing recommendations based on genre ID:`, genreId);
+            let discoverGenre = genreId;
+            if (!discoverGenre && topGenres.length > 0) {
+                // Pick a random one from top 3 for the search, or use comma-separated for 'OR'
+                discoverGenre = topGenres.join(',');
             }
+
+            const pageToRequest = recommendedState.page;
+            const sortMethod = 'popularity.desc';
+            const genreParam = discoverGenre ? `&with_genres=${discoverGenre}` : '';
+
+            const [moviesRes, tvRes] = await Promise.all([
+                fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${sortMethod}${genreParam}&vote_count.gte=100`),
+                fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${sortMethod}${genreParam}&vote_count.gte=50`)
+            ]);
+
+            const [mData, tData] = await Promise.all([moviesRes.json(), tvRes.json()]);
+
+            if (mData.results) mData.results.forEach(m => { m.media_type = 'movie'; m._rec_score = 5; });
+            if (tData.results) tData.results.forEach(m => { m.media_type = 'tv'; m._rec_score = 5; });
+
+            if (mData.results) allItems.push(...mData.results);
+            if (tData.results) allItems.push(...tData.results);
         }
 
-        const genreParam = genreId ? `&with_genres=${genreId}` : '';
+        // --- FILTERING & RANKING ---
+        // 1. Unique items by ID
+        const uniqueMap = new Map();
+        allItems.forEach(item => {
+            if (!uniqueMap.has(item.id)) uniqueMap.set(item.id, item);
+            else {
+                // If already exists, maybe boost score?
+                const existing = uniqueMap.get(item.id);
+                existing._rec_score = (existing._rec_score || 0) + 2;
+            }
+        });
 
-        // Randomize sort for more variety
-        const sortOptions = ['popularity.desc', 'vote_count.desc', 'vote_average.desc', 'revenue.desc'];
-        const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+        const sortedItems = Array.from(uniqueMap.values()).sort((a, b) => {
+            // Sort by recommendation score + weighted popularity/rating
+            const scoreA = (a._rec_score || 0) + (a.vote_average || 0) / 2;
+            const scoreB = (b._rec_score || 0) + (b.vote_average || 0) / 2;
+            return scoreB - scoreA;
+        });
 
-        // Stay on page 1 for personalized content to ensure quality, otherwise random
-        const pageToRequest = recommendedState.page === 1 ? (genreId ? 1 : Math.floor(Math.random() * 5) + 1) : recommendedState.page;
-
-        const baseURL = `https://api.themoviedb.org/3/discover`;
-        const commonParams = `api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}`;
-
-        const [moviesRes, tvRes] = await Promise.all([
-            fetch(`${baseURL}/movie?${commonParams}`),
-            fetch(`${baseURL}/tv?${commonParams}`)
-        ]);
-
-        const dataArr = await Promise.all([
-            moviesRes.json(), tvRes.json()
-        ]);
-
-        dataArr[0].results.forEach(m => m.media_type = 'movie');
-        dataArr[1].results.forEach(m => m.media_type = 'tv');
-
-        let allItems = [...dataArr[0].results, ...dataArr[1].results];
-
-        // Shuffle allItems for better randomness
-        allItems = allItems.sort(() => Math.random() - 0.5);
-
-        const uniqueItems = Array.from(new Map(allItems.map(m => [m.id, m])).values());
-
-        const filteredItems = uniqueItems.filter(item => {
+        const filteredItems = sortedItems.filter(item => {
             const isInWatched = state.watched.some(m => m.id === item.id);
             const isInWatchlist = state.watchlist.some(m => m.id === item.id);
             const isIgnored = state.ignored.some(m => m.id === item.id);
             const isAlreadyLoaded = recommendedState.loadedMovies.some(m => m.id === item.id);
             const hasValidPoster = item.poster_path;
-            const isHighRated = item.vote_average >= 6.0;
 
+            // Release date check (stay away from very old stuff unless highly rated)
             const releaseDate = item.release_date || item.first_air_date;
-            const isNotTooOld = releaseDate && new Date(releaseDate).getFullYear() >= 2000;
+            const year = releaseDate ? new Date(releaseDate).getFullYear() : 0;
+            const isQuality = item.vote_average >= 5.5 && item.vote_count > 10;
 
-            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isHighRated && isNotTooOld;
+            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isQuality && (year >= 1990 || item.vote_average >= 8);
         });
 
         const itemsToShow = filteredItems.slice(0, 12);
 
         if (itemsToShow.length === 0) {
-            if (recommendedState.page < 40) {
+            if (recommendedState.page < 50) {
                 recommendedState.page++;
                 recommendedState.isLoading = false;
-                // Add a small delay for recursion to let the CPU breathe
                 return setTimeout(loadRecommendedMovies, 100);
             }
             recommendedState.hasMore = false;
@@ -673,7 +904,6 @@ async function loadRecommendedMovies() {
         console.error('Error loading recommended items:', error);
     } finally {
         recommendedState.isLoading = false;
-        // Check if we still need more content after rendering (e.g. on huge screens)
         setTimeout(() => {
             const rect = loadingIndicator.getBoundingClientRect();
             if (rect.top < window.innerHeight + 100 && !recommendedState.isLoading && recommendedState.hasMore) {
@@ -747,7 +977,7 @@ function updateFeaturedCarousel() {
         const div = document.createElement('div');
         div.className = 'carousel-item';
         div.style.cursor = 'pointer';
-        div.onclick = () => window.open(watchUrl, '_blank');
+        div.onclick = () => openPlayer(item.id, item.media_type || 'movie');
         div.innerHTML = `<img src="https://image.tmdb.org/t/p/w342${item.poster_path}" alt="${title}">`;
         return div;
     };
@@ -776,14 +1006,13 @@ async function updateHeroSection() {
             const releaseDate = movie.release_date || movie.first_air_date || '';
             const year = releaseDate ? releaseDate.split('-')[0] : 'N/A';
             const backdropUrl = `https://image.tmdb.org/t/p/w1280${movie.backdrop_path}`;
-            const watchUrl = `https://izlelan.vercel.app/ara?q=${encodeURIComponent(title)}`;
 
             heroBackdrop.style.opacity = '0';
 
             const injectContent = () => {
                 heroMovieInfo.innerHTML = `
                     <div class="hero-actions">
-                        <button class="hero-primary-btn" onclick="window.open('${watchUrl}', '_blank')" title="${title}">
+                        <button class="hero-primary-btn" onclick="openPlayer(${movie.id}, '${movie.media_type || 'movie'}')" title="${title}">
                             <i class="fas fa-play"></i> <span>${title}</span>
                         </button>
                         <button class="hero-btn watchlist-btn" onclick="addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})">
@@ -889,9 +1118,10 @@ function renderSearchResults(movies) {
 function createMovieCard(movie, context) {
     const isWatched = state.watched.find(m => m.id === movie.id);
     const isWatchlist = state.watchlist.find(m => m.id === movie.id);
+    const isTV = movie.media_type === 'tv';
 
     const card = document.createElement('div');
-    card.className = `movie-card ${(isWatched || isWatchlist) && context === 'search' ? 'in-list' : ''}`;
+    card.className = `movie-card ${isTV ? 'is-tv' : 'is-movie'} ${(isWatched || isWatchlist) && context === 'search' ? 'in-list' : ''}`;
     card.setAttribute('data-id', movie.id);
     card.setAttribute('data-context', context);
 
@@ -906,11 +1136,13 @@ function createMovieCard(movie, context) {
         </button>
     ` : '';
 
-    const watchUrl = `https://izlelan.vercel.app/ara?q=${encodeURIComponent(title)}`;
+    const typeIcon = isTV ? '<i class="fas fa-layer-group"></i>' : '<i class="fas fa-film"></i>';
 
     card.innerHTML = `
-        <div class="poster-container" onclick="window.open('${watchUrl}', '_blank')" style="cursor: pointer;">
+        ${isTV ? '<div class="poster-stack poster-stack-1"></div><div class="poster-stack poster-stack-2"></div>' : ''}
+        <div class="poster-container" onclick="openPlayer(${movie.id}, '${movie.media_type || 'movie'}')" style="cursor: pointer;">
             ${removeBtnHtml}
+            <div class="media-type-badge" title="${isTV ? 'Dizi' : 'Film'}">${typeIcon}</div>
             <img src="${posterUrl}" alt="${title}" loading="lazy">
             <div class="card-overlay">
                 <div class="play-overlay">
@@ -919,7 +1151,7 @@ function createMovieCard(movie, context) {
             </div>
         </div>
         <div class="movie-info">
-            <h3 onclick="window.open('${watchUrl}', '_blank')" style="cursor: pointer;">${title}</h3>
+            <h3 onclick="openPlayer(${movie.id}, '${movie.media_type || 'movie'}')" style="cursor: pointer;">${title}</h3>
             <div class="movie-meta">
                 <span><i class="far fa-calendar"></i> ${year}</span>
                 <span><i class="fas fa-star"></i> ${movie.vote_average?.toFixed(1) || 'N/A'}</span>
@@ -933,7 +1165,7 @@ function createMovieCard(movie, context) {
                 </button>
                 <button class="action-btn watchlist-btn ${isWatchlist ? 'is-added' : ''}" 
                         onclick="${isWatchlist ? '' : `addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})`}">
-                    <i class="fas fa-plus"></i> <span>${isWatchlist ? 'Listede' : 'İzlenecek'}</span>
+                    <i class="fas fa-plus"></i> <span class="btn-text">${isWatchlist ? 'Listede' : 'İzlenecek'}</span>
                 </button>
                 ${context === 'recommended' ? `
                     <button class="action-btn ignore-btn" onclick="ignoreMovie(${JSON.stringify(movie).replace(/"/g, '&quot;')})" title="Gizle">
@@ -1253,6 +1485,110 @@ window.ignoreMovie = (movie) => {
     removeCardFromRecommended(movie.id);
 };
 
+// --- Player Functions ---
+window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => {
+    const modal = document.getElementById('playerModal');
+    const iframe = document.getElementById('moviePlayer');
+    const playerInfo = document.getElementById('playerInfo');
+
+    // Show modal and loading state
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    // Set embed URL
+    const embedUrl = mediaType === 'tv'
+        ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
+        : `https://vidsrc.to/embed/movie/${id}`;
+
+    // Only update iframe if source changed to prevent reload
+    if (iframe.src !== embedUrl) {
+        iframe.src = embedUrl;
+    }
+
+    // Fetch details for display in player
+    try {
+        const movie = await fetchItemDetails(id, mediaType);
+        if (movie) {
+            const title = movie.title || movie.name;
+            const year = (movie.release_date || movie.first_air_date || '').split('-')[0];
+            const rating = movie.vote_average?.toFixed(1);
+            const overview = movie.overview || 'Açıklama bulunamadı.';
+
+            let selectorHtml = '';
+            if (mediaType === 'tv' && movie.seasons) {
+                const seasons = movie.seasons.filter(s => s.season_number > 0);
+                selectorHtml = `
+                    <div class="tv-selectors">
+                        <div class="selector-group">
+                            <label>Sezon</label>
+                            <select id="seasonSelector" onchange="loadEpisodes(${id}, this.value)">
+                                ${seasons.map(s => `<option value="${s.season_number}" ${s.season_number == season ? 'selected' : ''}>${s.season_number}. Sezon</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="selector-group">
+                            <label>Bölüm</label>
+                            <select id="episodeSelector" onchange="changeEpisode(${id}, document.getElementById('seasonSelector').value, this.value)">
+                                <!-- Will be populated by loadEpisodes -->
+                                <option>Yükleniyor...</option>
+                            </select>
+                        </div>
+                    </div>
+                `;
+            }
+
+            playerInfo.innerHTML = `
+                <div class="player-info-header">
+                    <h2>${title}</h2>
+                    ${selectorHtml}
+                </div>
+                <div class="player-meta">
+                    <span><i class="far fa-calendar"></i> ${year}</span>
+                    <span><i class="fas fa-star"></i> ${rating}</span>
+                    <span><i class="fas fa-video"></i> Full HD</span>
+                </div>
+                <p class="player-overview">${overview}</p>
+            `;
+
+            if (mediaType === 'tv') {
+                loadEpisodes(id, season, episode);
+            }
+        }
+    } catch (e) {
+        console.error('Player info fetch error:', e);
+    }
+};
+
+window.loadEpisodes = async (id, seasonNumber, currentEpisode = 1) => {
+    const episodeSelector = document.getElementById('episodeSelector');
+    if (!episodeSelector) return;
+
+    try {
+        const res = await fetch(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}?api_key=${TMDB_API_KEY}&language=en-US`);
+        const data = await res.json();
+
+        if (data.episodes) {
+            episodeSelector.innerHTML = data.episodes.map(ev =>
+                `<option value="${ev.episode_number}" ${ev.episode_number == currentEpisode ? 'selected' : ''}>${ev.episode_number}. Bölüm: ${ev.name}</option>`
+            ).join('');
+        }
+    } catch (e) {
+        console.error('Error loading episodes:', e);
+        episodeSelector.innerHTML = '<option>Hata oluştu</option>';
+    }
+};
+
+window.changeEpisode = (id, season, episode) => {
+    openPlayer(id, 'tv', season, episode);
+};
+
+window.closePlayer = () => {
+    const modal = document.getElementById('playerModal');
+    const iframe = document.getElementById('moviePlayer');
+    modal.classList.remove('active');
+    iframe.src = '';
+    document.body.style.overflow = '';
+};
+
 // --- Event Listeners ---
 function setupEventListeners() {
     // Navigation
@@ -1303,6 +1639,14 @@ function setupEventListeners() {
         });
     }
     if (typeof restoreFile !== 'undefined' && restoreFile) restoreFile.addEventListener('change', handleRestore);
+
+    // Player modal close on background click
+    const playerModal = document.getElementById('playerModal');
+    if (playerModal) {
+        playerModal.addEventListener('click', (e) => {
+            if (e.target === playerModal) closePlayer();
+        });
+    }
 
     // Sort Buttons
     document.querySelectorAll('.sort-controls .sort-btn').forEach(btn => {
