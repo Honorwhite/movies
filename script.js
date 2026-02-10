@@ -1524,9 +1524,11 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     const modal = document.getElementById('playerModal');
     const iframe = document.getElementById('moviePlayer');
     const playerInfo = document.getElementById('playerInfo');
+    const shield = document.getElementById('playerShield');
 
-    // Show modal and loading state
+    // Show modal and reset shield
     modal.classList.add('active');
+    if (shield) shield.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 
     // Set embed URL
@@ -1621,6 +1623,13 @@ window.closePlayer = () => {
     modal.classList.remove('active');
     iframe.src = '';
     document.body.style.overflow = '';
+};
+
+window.removeShield = () => {
+    const shield = document.getElementById('playerShield');
+    if (shield) {
+        shield.classList.add('hidden');
+    }
 };
 
 // --- Event Listeners ---
