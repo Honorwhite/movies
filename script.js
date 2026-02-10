@@ -1531,8 +1531,8 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
 
     // Set embed URL
     const embedUrl = mediaType === 'tv'
-        ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
-        : `https://vidsrc.to/embed/movie/${id}`;
+        ? `https://player.videasy.net/tv/${id}/${season}/${episode}`
+        : `https://player.videasy.net/movie/${id}`;
 
     // Only update iframe if source changed to prevent reload
     if (iframe.src !== embedUrl) {
