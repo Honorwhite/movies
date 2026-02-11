@@ -426,12 +426,8 @@ async function checkLocalServer() {
         clearTimeout(timeoutId);
 
         isLocalServerAvailable = response.ok;
-        if (isLocalServerAvailable) {
-            console.log('Yerel sunucu aktif.');
-        }
     } catch (e) {
         isLocalServerAvailable = false;
-        console.log('Yerel sunucu yok, bulut kullanılacak.');
     }
 }
 
@@ -731,6 +727,52 @@ async function searchMovies(query) {
     }
 }
 
+// Global filter for "Making of", "Behind the Scenes", etc.
+function isSafeTitle(item) {
+    const title = (item.title || item.name || '').toLowerCase();
+    const blacklist = [
+        'making of',
+        'behind the scenes',
+        'special features',
+        'bonus features',
+        'extras',
+        'the vision of',
+        'evolution of',
+        'creating the',
+        'legacy of',
+        'deleted scenes',
+        'visual effects',
+        'the music of',
+        'the art of',
+        'interview with',
+        'conversation with',
+        'a look at',
+        'on the set',
+        'production diary',
+        'a day in the life',
+        'set tour',
+        'backstage',
+        'featurette',
+        'inside the',
+        'filming of',
+        'recording of',
+        'the making',
+        'b-roll',
+        'production gallery',
+        'anatomy of',
+        'journey to',
+        'first look',
+        'preview',
+        'sneak peek',
+        'teaser',
+        'trailer',
+        'the world of',
+        'behind the mix',
+        'unveiling'
+    ];
+    return !blacklist.some(word => title.includes(word));
+}
+
 // --- Recommended Movies & Categories ---
 async function initGenres() {
     try {
@@ -907,8 +949,9 @@ async function loadRecommendedMovies() {
             const releaseDate = item.release_date || item.first_air_date;
             const year = releaseDate ? new Date(releaseDate).getFullYear() : 0;
             const isQuality = item.vote_average >= 5.5 && item.vote_count > 10;
+            const isSafe = isSafeTitle(item);
 
-            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isQuality && (year >= 1990 || item.vote_average >= 8);
+            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isQuality && isSafe && (year >= 1990 || item.vote_average >= 8);
         });
 
         const itemsToShow = filteredItems.slice(0, 12);
@@ -1109,13 +1152,13 @@ async function updateHeroSection() {
             const randomPage = Math.floor(Math.random() * 3) + 1;
             const trendRes = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}&language=en-US&page=${randomPage}`);
             const data = await trendRes.json();
-            pool = data.results.filter(item => item.backdrop_path);
+            pool = data.results.filter(item => item.backdrop_path && isSafeTitle(item));
         } else {
             const randomPage = Math.floor(Math.random() * 5) + 1;
             const genreStr = topGenreIds.join(',');
             const res = await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_genres=${genreStr}&page=${randomPage}&language=en-US`);
             const data = await res.json();
-            pool = data.results.filter(item => item.backdrop_path);
+            pool = data.results.filter(item => item.backdrop_path && isSafeTitle(item));
         }
 
         if (pool.length === 0) return;
@@ -1132,8 +1175,8 @@ async function updateHeroSection() {
 function renderSearchResults(movies) {
     searchResults.innerHTML = '';
 
-    // Filter out items without posters or those that aren't movie/tv
-    const filtered = movies.filter(m => (m.media_type === 'movie' || m.media_type === 'tv') && m.poster_path);
+    // Filter out items without posters or those that aren't movie/tv, and non-making-of content
+    const filtered = movies.filter(m => (m.media_type === 'movie' || m.media_type === 'tv') && m.poster_path && isSafeTitle(m));
 
     // Sort by popularity descending
     filtered.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
@@ -1162,7 +1205,9 @@ function createMovieCard(movie, context) {
     const title = movie.title || movie.name;
     const releaseDate = movie.release_date || movie.first_air_date || '';
     const year = releaseDate ? releaseDate.split('-')[0] : 'N/A';
-    const posterUrl = `https://image.tmdb.org/t/p/w500${movie.poster_path}`;
+    const posterUrl = movie.poster_path
+        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+        : `https://placehold.co/500x750/0f172a/FFF?text=${encodeURIComponent(title)}`;
 
     const removeBtnHtml = (context === 'watched' || context === 'watchlist') ? `
         <button class="action-btn remove-btn" onclick="event.stopPropagation(); ${context === 'watched' ? `removeFromWatched(${movie.id})` : `removeFromWatchlist(${movie.id})`}" title="Listeden Kaldır">
@@ -1404,9 +1449,6 @@ async function fetchMissingDetails() {
     }
 
     isFetchingDetails = false;
-    // We removed saveState() and renderStats() from here to prevent infinite loop of syncing
-    // The details will be saved to local/cloud on next manual action (add/remove)
-    console.log('Background details fetch completed.');
 }
 
 function filterList(list, searchQuery, genreId, sortType = 'abc') {
@@ -1578,6 +1620,7 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
             playerInfo.innerHTML = `
                 <div class="player-info-header">
                     <h2>${title}</h2>
+                    <br>
                     <div class="player-meta">
                         <span><i class="far fa-calendar"></i> ${year}</span>
                         <span><i class="fas fa-star" style="color:#f59e0b"></i> ${rating}</span>
@@ -1588,9 +1631,13 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
                 <div class="player-description">
                     <p class="player-overview">${overview}</p>
                 </div>
+                <div id="playerUniverse" class="player-universe">
+                    <!-- Universe content will be loaded here -->
+                </div>
             `;
 
             updateModalFooter(movie);
+            loadUniverseContent(movie);
 
             if (mediaType === 'tv') {
                 loadEpisodes(id, season, episode);
@@ -1600,6 +1647,203 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
         console.error('Player info fetch error:', e);
         playerInfo.innerHTML = '<p>Bilgiler yüklenirken bir hata oluştu.</p>';
     }
+};
+
+// Global render task ID to prevent overlapping Universe list renders
+let currentUniverseRenderId = 0;
+
+function renderUniverseList(items) {
+    const listContainer = document.getElementById('universeList');
+    if (!listContainer) return;
+
+    if (items.length === 0) {
+        listContainer.innerHTML = '<p style="text-align:center; color:var(--text-dim); font-size:0.9rem;">Sonuç bulunamadı.</p>';
+        return;
+    }
+
+    const renderId = ++currentUniverseRenderId;
+    listContainer.innerHTML = '';
+    const chunkSize = 12;
+    let index = 0;
+
+    function renderChunk() {
+        // If a new render task has started, abort this one
+        if (renderId !== currentUniverseRenderId) return;
+
+        const chunk = items.slice(index, index + chunkSize);
+        const html = chunk.map(item => {
+            const itemTitle = item.title || item.name;
+            const itemYear = (item.release_date || item.first_air_date || '').split('-')[0] || 'N/A';
+            const itemRating = item.vote_average?.toFixed(1) || 'N/A';
+            const itemIcon = item.media_type === 'tv' ? 'fa-tv' : 'fa-film';
+            const posterUrl = item.poster_path
+                ? `https://image.tmdb.org/t/p/w92${item.poster_path}`
+                : `https://placehold.co/92x138/0f172a/FFF?text=Yok`;
+
+            return `
+                <div class="universe-item" onclick="openPlayer(${item.id}, '${item.media_type}')">
+                    <img src="${posterUrl}" alt="${itemTitle}" loading="lazy" onerror="this.src='https://placehold.co/92x138/0f172a/FFF?text=Yok'">
+                    <div class="universe-item-info">
+                        <h4>${itemTitle}</h4>
+                        <div class="universe-item-meta">
+                            <span><i class="far fa-calendar"></i> ${itemYear}</span>
+                            <span><i class="fas fa-star" style="color:#f59e0b"></i> ${itemRating}</span>
+                            <span><i class="fas ${itemIcon}"></i> ${item.media_type === 'tv' ? 'Dizi' : 'Film'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        listContainer.insertAdjacentHTML('beforeend', html);
+        index += chunkSize;
+
+        if (index < items.length) {
+            requestAnimationFrame(renderChunk);
+        }
+    }
+
+    renderChunk();
+}
+
+window.loadUniverseContent = async (movie) => {
+    const container = document.getElementById('playerUniverse');
+    if (!container) return;
+
+    const id = movie.id;
+    const mediaType = movie.media_type || 'movie';
+    const title = movie.title || movie.name;
+
+    // Major Studios Mapping
+    const franchiseMap = {
+        'Marvel Studios': { companyId: 420, keywordId: 180547 },
+        'Lucasfilm': { companyId: 1, keywordId: 161168 },
+        'DC Films': { companyId: 128064, keywordId: 8828 },
+        'DC Entertainment': { companyId: 9993, keywordId: 8828 },
+        'Pixar': { companyId: 3 },
+        'Walt Disney Animation Studios': { companyId: 6125 },
+        'Studio Ghibli': { companyId: 10341 },
+        'Wizarding World': { keywordId: 616 } // Harry Potter
+    };
+
+    let activeFranchise = null;
+    if (movie.production_companies) {
+        for (const company of movie.production_companies) {
+            if (franchiseMap[company.name]) {
+                activeFranchise = { ...franchiseMap[company.name], name: company.name };
+                break;
+            }
+        }
+    }
+
+    // Special case for Star Wars even if production company is missing (sometimes happens in TMDB data)
+    if (!activeFranchise && (title.includes('Star Wars') || title.includes('Yıldız Savaşları'))) {
+        activeFranchise = franchiseMap['Lucasfilm'];
+    }
+
+    // Determine Franchise Name for search fallback
+    let franchiseName = '';
+    if (movie.belongs_to_collection) {
+        franchiseName = movie.belongs_to_collection.name.replace(' Collection', '').replace(' Serisi', '');
+    } else {
+        franchiseName = title.split(':')[0].split(' - ')[0].trim();
+    }
+
+    container.innerHTML = `
+        <div class="universe-tabs">
+            <div class="universe-tab active" onclick="switchUniverseTab(this, 'main')">Ana Seri</div>
+            <div class="universe-tab" onclick="switchUniverseTab(this, 'saga')">Bütün Filmler</div>
+            <div class="universe-tab" onclick="switchUniverseTab(this, 'all')">Tüm Evren</div>
+        </div>
+        <div id="universeList" class="universe-content">
+            <div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+        </div>
+    `;
+
+    const universeData = { main: [], saga: [], all: [] };
+
+    window.switchUniverseTab = async (tabElement, type) => {
+        container.querySelectorAll('.universe-tab').forEach(t => t.classList.remove('active'));
+        tabElement.classList.add('active');
+
+        const listContainer = document.getElementById('universeList');
+        listContainer.innerHTML = '<div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>';
+
+        if (universeData[type].length > 0) {
+            renderUniverseList(universeData[type]);
+            return;
+        }
+
+        try {
+            let results = [];
+            if (type === 'main') {
+                if (movie.belongs_to_collection) {
+                    const res = await fetch(`https://api.themoviedb.org/3/collection/${movie.belongs_to_collection.id}?api_key=${TMDB_API_KEY}&language=en-US`);
+                    const data = await res.json();
+                    results = (data.parts || []).map(p => ({ ...p, media_type: 'movie' })).filter(isSafeTitle);
+                } else {
+                    const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
+                    const data = await res.json();
+                    results = (data.results || []).filter(isSafeTitle);
+                }
+            } else if (type === 'saga') {
+                if (activeFranchise && activeFranchise.companyId) {
+                    // Use production company filter for "same producer" accuracy
+                    const res = await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=release_date.asc`);
+                    const data = await res.json();
+                    results = data.results || [];
+                } else {
+                    const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
+                    const data = await res.json();
+                    results = (data.results || []).filter(isSafeTitle);
+                }
+            } else if (type === 'all') {
+                if (activeFranchise && activeFranchise.companyId) {
+                    // Multi-step discovery for better "Universe" coverage
+                    const [moviesRes, tvRes] = await Promise.all([
+                        fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=release_date.asc`),
+                        fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=first_air_date.asc`)
+                    ]);
+                    const [mData, tData] = await Promise.all([moviesRes.json(), tvRes.json()]);
+                    results = [
+                        ...(mData.results || []).map(m => ({ ...m, media_type: 'movie' })),
+                        ...(tData.results || []).map(t => ({ ...t, media_type: 'tv' }))
+                    ];
+                } else {
+                    const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
+                    const data = await res.json();
+                    results = (data.results || []).filter(item => (item.media_type === 'movie' || item.media_type === 'tv') && isSafeTitle(item));
+                }
+            }
+
+            // Remove Making Of and Sort
+            results = results.filter(isSafeTitle);
+            results.sort((a, b) => {
+                const dateA = a.release_date || a.first_air_date || '0';
+                const dateB = b.release_date || b.first_air_date || '0';
+                return dateA.localeCompare(dateB);
+            });
+
+            // Unique items only
+            const unique = [];
+            const seen = new Set();
+            for (const item of results) {
+                if (!seen.has(`${item.id}_${item.media_type || 'movie'}`)) {
+                    unique.push(item);
+                    seen.add(`${item.id}_${item.media_type || 'movie'}`);
+                }
+            }
+
+            universeData[type] = unique;
+            renderUniverseList(unique);
+        } catch (e) {
+            console.error('Universe switch error:', e);
+            listContainer.innerHTML = '<p>Yüklenemedi.</p>';
+        }
+    };
+
+    // Initial load
+    switchUniverseTab(container.querySelector('.universe-tab'), 'main');
 };
 
 window.updateModalFooter = (movie) => {

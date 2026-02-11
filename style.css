@@ -2142,6 +2142,102 @@ body {
     padding-right: 40px;
 }
 
+/* Universe / Collection Section */
+.player-universe {
+    margin-top: 25px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 25px;
+}
+
+.universe-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+}
+
+.universe-tab {
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+.universe-tab:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: white;
+}
+
+.universe-tab.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.universe-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.universe-item {
+    display: flex;
+    gap: 15px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 14px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform 0.2s ease, background 0.2s ease;
+    align-items: center;
+    contain: layout;
+    will-change: transform, background;
+}
+
+.universe-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: translate3d(5px, 0, 0);
+}
+
+.universe-item img {
+    width: 60px;
+    height: 90px;
+    border-radius: 8px;
+    object-fit: cover;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    transform: translateZ(0);
+}
+
+.universe-item-info {
+    flex: 1;
+}
+
+.universe-item-info h4 {
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+    color: white;
+}
+
+.universe-item-meta {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    display: flex;
+    gap: 10px;
+}
+
+.universe-item-meta i {
+    font-size: 0.7rem;
+}
+
 /* Responsive Overrides */
 @media (max-width: 1100px) {
     .player-content {
