@@ -820,28 +820,41 @@ function selectGenreForList(listType, genreId, chipElement) {
     const container = listType === 'watched' ? watchedGenreChips : watchlistGenreChips;
     const currentState = listType === 'watched' ? watchedListState : watchlistSectionState;
 
-    if (currentState.selectedGenre === genreId) return;
+    // Toggle logic: If clicking the same genre again, reset to null
+    const finalGenreId = currentState.selectedGenre === genreId ? null : genreId;
 
     // Update UI in that specific container
     container.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
-    chipElement.classList.add('active');
+
+    // Find the correct chip to activate (either the clicked one or the "All" chip)
+    if (finalGenreId === null) {
+        container.querySelector('.genre-chip:first-child').classList.add('active');
+    } else {
+        chipElement.classList.add('active');
+    }
 
     // Update state
-    currentState.selectedGenre = genreId;
+    currentState.selectedGenre = finalGenreId;
 
     // Re-render the specific list
     renderLists();
 }
 
 function selectGenre(genreId, chipElement) {
-    if (recommendedState.selectedGenre === genreId) return;
+    // Toggle logic: If clicking the same genre again, reset to null
+    const finalGenreId = recommendedState.selectedGenre === genreId ? null : genreId;
 
     // Update UI - only for chips in the recommended section
     genreChips.querySelectorAll('.genre-chip').forEach(c => c.classList.remove('active'));
-    chipElement.classList.add('active');
+
+    if (finalGenreId === null) {
+        genreChips.querySelector('.genre-chip:first-child').classList.add('active');
+    } else {
+        chipElement.classList.add('active');
+    }
 
     // Update state and reload
-    recommendedState.selectedGenre = genreId;
+    recommendedState.selectedGenre = finalGenreId;
     recommendedState.page = 1;
     recommendedState.loadedMovies = [];
     recommendedState.hasMore = true;
@@ -1355,10 +1368,12 @@ async function renderStats() {
     const wlTV = state.watchlist.filter(m => m.media_type === 'tv');
 
     let wlMinutes = 0;
+    let wlTotalEpisodes = 0;
     wlMovies.forEach(m => wlMinutes += m.runtime || 100);
     wlTV.forEach(m => {
         const eps = m.number_of_episodes || (m.number_of_seasons ? m.number_of_seasons * 10 : 10);
         const avgRuntime = (m.episode_run_time && m.episode_run_time[0]) || 45;
+        wlTotalEpisodes += eps;
         wlMinutes += eps * avgRuntime;
     });
 
@@ -1388,8 +1403,8 @@ async function renderStats() {
         <div class="stat-card">
             <div class="stat-icon"><i class="fas fa-tv"></i></div>
             <div class="stat-content">
-                <span class="stat-value">${wlTV.length}</span>
-                <span class="stat-label">Kalan Dizi</span>
+                <span class="stat-value">${wlTV.length} <small style="font-size: 0.7rem; color: var(--text-muted)">dizi</small></span>
+                <span class="stat-label">${wlTotalEpisodes} Kalan Bölüm</span>
             </div>
         </div>
          <div class="stat-card">
