@@ -1527,7 +1527,7 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     const playerFooter = document.getElementById('playerFooter');
     // Show modal
     modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
+    document.documentElement.classList.add('modal-open');
 
     // Set embed URL
     const embedUrl = mediaType === 'tv'
@@ -1560,7 +1560,7 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
                     <div class="tv-selectors">
                         <div class="selector-group">
                             <label>Sezon</label>
-                            <select id="seasonSelector" onchange="loadEpisodes(${id}, this.value)">
+                            <select id="seasonSelector" onchange="changeEpisode(${id}, this.value, 1)">
                                 ${seasons.map(s => `<option value="${s.season_number}" ${s.season_number == season ? 'selected' : ''}>${s.season_number}. Sezon</option>`).join('')}
                             </select>
                         </div>
@@ -1578,14 +1578,16 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
             playerInfo.innerHTML = `
                 <div class="player-info-header">
                     <h2>${title}</h2>
+                    <div class="player-meta">
+                        <span><i class="far fa-calendar"></i> ${year}</span>
+                        <span><i class="fas fa-star" style="color:#f59e0b"></i> ${rating}</span>
+                        ${mediaType === 'tv' ? '<span><i class="fas fa-tv"></i> Dizi</span>' : '<span><i class="fas fa-film"></i> Film</span>'}
+                    </div>
                     ${selectorHtml}
                 </div>
-                <div class="player-meta">
-                    <span><i class="far fa-calendar"></i> ${year}</span>
-                    <span><i class="fas fa-star" style="color:#f59e0b"></i> ${rating}</span>
-                    <span><i class="fas fa-closed-captioning"></i> TR Alt yazı & Dublaj</span>
+                <div class="player-description">
+                    <p class="player-overview">${overview}</p>
                 </div>
-                <p class="player-overview">${overview}</p>
             `;
 
             updateModalFooter(movie);
@@ -1611,7 +1613,7 @@ window.updateModalFooter = (movie) => {
         <button class="footer-btn watched-btn ${isWatched ? 'active' : ''}" 
                 onclick='handleModalWatched(${JSON.stringify(movie).replace(/'/g, "&#39;")})'>
             <i class="fas ${isWatched ? 'fa-check-circle' : 'fa-check'}"></i>
-            <span>${isWatched ? 'İzlendi' : 'İzledim Yap'}</span>
+            <span>${isWatched ? 'İzlendi' : 'İzledim'}</span>
         </button>
         <button class="footer-btn watchlist-btn ${isWatchlist ? 'active' : ''}" 
                 onclick='handleModalWatchlist(${JSON.stringify(movie).replace(/'/g, "&#39;")})'>
@@ -1669,7 +1671,7 @@ window.closePlayer = () => {
     const iframe = document.getElementById('moviePlayer');
     modal.classList.remove('active');
     iframe.src = '';
-    document.body.style.overflow = '';
+    document.documentElement.classList.remove('modal-open');
 };
 
 
