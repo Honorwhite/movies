@@ -1577,6 +1577,30 @@ window.ignoreMovie = (movie) => {
 };
 
 // --- Player Functions ---
+let currentPlayerSource = 'vidsrc';
+
+window.switchPlayerSource = (source, id, mediaType, season, episode) => {
+    currentPlayerSource = source;
+
+    // Update active class in UI
+    document.querySelectorAll('.source-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = Array.from(document.querySelectorAll('.source-btn')).find(btn =>
+        (source === 'vidsrc' && btn.textContent === 'Kaynak 1') ||
+        (source === 'videasy' && btn.textContent === 'Kaynak 2')
+    );
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Reload player with new source
+    const iframe = document.getElementById('moviePlayer');
+    const embedUrl = source === 'tv' || mediaType === 'tv'
+        ? (source === 'videasy' ? `https://player.videasy.net/tv/${id}/${season}/${episode}` : `https://vidsrc-embed.ru/embed/tv/${id}/${season}/${episode}`)
+        : (source === 'videasy' ? `https://player.videasy.net/movie/${id}` : `https://vidsrc-embed.ru/embed/movie/${id}`);
+
+    if (iframe.src !== embedUrl) {
+        iframe.src = embedUrl;
+    }
+};
+
 window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => {
     const modal = document.getElementById('playerModal');
     const iframe = document.getElementById('moviePlayer');
@@ -1586,10 +1610,10 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     modal.classList.add('active');
     document.documentElement.classList.add('modal-open');
 
-    // Set embed URL
+    // Set embed URL based on global source
     const embedUrl = mediaType === 'tv'
-        ? `https://player.videasy.net/tv/${id}/${season}/${episode}`
-        : `https://player.videasy.net/movie/${id}`;
+        ? (currentPlayerSource === 'videasy' ? `https://player.videasy.net/tv/${id}/${season}/${episode}` : `https://vidsrc-embed.ru/embed/tv/${id}/${season}/${episode}`)
+        : (currentPlayerSource === 'videasy' ? `https://player.videasy.net/movie/${id}` : `https://vidsrc-embed.ru/embed/movie/${id}`);
 
     // Only update iframe if source changed to prevent reload
     if (iframe.src !== embedUrl) {
@@ -1600,15 +1624,25 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     playerInfo.innerHTML = '<div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>';
     playerFooter.innerHTML = '';
 
-    // Fetch details for display in player
+    // Fetched details for display in player
     try {
+        // Fallback for cases where mediaType might be 'undefined' string from template literal
+        if (mediaType === 'undefined' || !mediaType) mediaType = 'movie';
+
         const movie = await fetchItemDetails(id, mediaType);
-        if (movie) {
+        if (movie && (movie.title || movie.name)) {
             movie.media_type = mediaType; // Ensure media_type is correct
             const title = movie.title || movie.name;
             const year = (movie.release_date || movie.first_air_date || '').split('-')[0];
             const rating = movie.vote_average?.toFixed(1);
             const overview = movie.overview || 'Açıklama bulunamadı.';
+
+            let sourceSelectorHtml = `
+                <div class="player-source-selector">
+                    <button class="source-btn ${currentPlayerSource === 'vidsrc' ? 'active' : ''}" onclick="switchPlayerSource('vidsrc', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 1</button>
+                    <button class="source-btn ${currentPlayerSource === 'videasy' ? 'active' : ''}" onclick="switchPlayerSource('videasy', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 2</button>
+                </div>
+            `;
 
             let selectorHtml = '';
             if (mediaType === 'tv' && movie.seasons) {
@@ -1634,7 +1668,10 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
 
             playerInfo.innerHTML = `
                 <div class="player-info-header">
-                    <h2>${title}</h2>
+                    <div class="player-title-row">
+                        <h2>${title}</h2>
+                        ${sourceSelectorHtml}
+                    </div>
                     <br>
                     <div class="player-meta">
                         <span><i class="far fa-calendar"></i> ${year}</span>
@@ -1799,18 +1836,18 @@ window.loadUniverseContent = async (movie) => {
                 } else {
                     const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
                     const data = await res.json();
-                    results = (data.results || []).filter(isSafeTitle);
+                    results = (data.results || []).map(m => ({ ...m, media_type: 'movie' })).filter(isSafeTitle);
                 }
             } else if (type === 'saga') {
                 if (activeFranchise && activeFranchise.companyId) {
                     // Use production company filter for "same producer" accuracy
                     const res = await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=release_date.asc`);
                     const data = await res.json();
-                    results = data.results || [];
+                    results = (data.results || []).map(m => ({ ...m, media_type: 'movie' }));
                 } else {
                     const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
                     const data = await res.json();
-                    results = (data.results || []).filter(isSafeTitle);
+                    results = (data.results || []).map(m => ({ ...m, media_type: 'movie' })).filter(isSafeTitle);
                 }
             } else if (type === 'all') {
                 if (activeFranchise && activeFranchise.companyId) {
@@ -2026,6 +2063,39 @@ function setupEventListeners() {
     setupInfiniteScroll();
 }
 
+
+// --- Aggressive Popup & New Tab Blocker ---
+(function () {
+    // 1. Block any programmatic window.open calls
+    window.open = function () {
+        console.warn('CineTrack: Popup blocked');
+        return {
+            focus: () => { },
+            close: () => { },
+            document: { write: () => { } }
+        }; // Return dummy object to prevent errors in ad scripts
+    };
+
+    // 2. Intercept all clicks to prevent target="_blank"
+    document.addEventListener('click', (e) => {
+        const target = e.target.closest('a');
+        if (target && target.target === '_blank') {
+            e.preventDefault();
+            window.location.href = target.href;
+        }
+    }, true);
+
+    // 3. Focus Protection: If a popup tries to take focus while player is open
+    window.addEventListener('blur', () => {
+        const modal = document.getElementById('playerModal');
+        if (modal && modal.classList.contains('active')) {
+            // Attempt to pull focus back immediately if a popup escapes
+            setTimeout(() => {
+                window.focus();
+            }, 100);
+        }
+    });
+})();
 
 // Run Init
 init();
