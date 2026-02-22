@@ -199,7 +199,9 @@ async function fetchUsersFromCloud() {
     }
 }
 
+let authBackgroundSet = false;
 async function setAuthBackground() {
+    if (authBackgroundSet) return;
     try {
         const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}`);
         const data = await response.json();
@@ -212,6 +214,7 @@ async function setAuthBackground() {
             const overlay = document.getElementById('userSelectionOverlay');
             if (overlay) {
                 overlay.style.setProperty('--bg-image', `url(${backdropUrl})`);
+                authBackgroundSet = true;
             }
         }
     } catch (e) {
