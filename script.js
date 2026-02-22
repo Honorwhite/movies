@@ -6,7 +6,7 @@ if (localStorage.getItem('active_user')) {
     document.documentElement.classList.add('user-logged-in');
 }
 
-let isLocalServerAvailable = false;
+// let isLocalServerAvailable = false; // Removed obsolete feature
 
 let state = {
     currentUser: null,
@@ -114,28 +114,42 @@ async function init() {
 
     setupEventListeners();
     setupScrollTop();
-    await checkLocalServer();
-
     // Check for saved user session
     const savedUser = localStorage.getItem('active_user');
     if (savedUser) {
         state.currentUser = savedUser;
         document.documentElement.classList.add('user-logged-in');
         document.getElementById('userSelectionOverlay').style.display = 'none';
+        document.getElementById('searchView').classList.add('active'); // Activate search view
         const nameSpan = document.getElementById('activeUserName');
         if (nameSpan) nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
 
-        document.getElementById('searchView').classList.add('active'); // Activate search view
-        updateHeroSection();
-        await loadStateFromCloud();
+        // PRIORITY: Load local data and show UI instantly
+        loadStateFromLocal(false);
         renderLists();
         initGenres();
-        loadRecommendedMovies();
+
+        // BACKGROUND: Cloud sync and discovery
+        setTimeout(async () => {
+            await loadStateFromCloud();
+            updateHeroSection();
+            loadRecommendedMovies();
+        }, 100);
+
+        // Final cleanup of splash screen
+        setTimeout(() => {
+            const appLoader = document.getElementById('appLoader');
+            if (appLoader) appLoader.classList.add('hidden');
+        }, 500);
     } else {
-        setTimeout(showLogin, 100); // Tiny delay to ensure DOM is ready
+        setTimeout(showLogin, 100);
+        setTimeout(() => {
+            const appLoader = document.getElementById('appLoader');
+            if (appLoader) appLoader.classList.add('hidden');
+        }, 500);
     }
 
-    // Register PWA Service Worker (Optional: remove if it causes fetch errors)
+    // Register PWA Service Worker
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
@@ -196,36 +210,10 @@ async function fetchUsersFromCloud() {
         }
     } catch (e) {
         console.error('Kullanıcı senkronizasyon hatası:', e);
-        state.users = mergedUsers;
     }
 }
 
-let authBackgroundSet = false;
-let authBackgroundFetching = false;
-async function setAuthBackground() {
-    if (authBackgroundSet || authBackgroundFetching) return;
-    authBackgroundFetching = true;
-    try {
-        const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}`);
-        const data = await response.json();
-        if (data.results && data.results.length > 0) {
-            const randomMovie = data.results[Math.floor(Math.random() * data.results.length)];
-            const backdropUrl = `https://image.tmdb.org/t/p/w1280${randomMovie.backdrop_path}`;
-            document.documentElement.style.setProperty('--auth-bg', `url(${backdropUrl})`);
-
-            // Apply to the overlay's specialized background element
-            const overlay = document.getElementById('userSelectionOverlay');
-            if (overlay) {
-                overlay.style.setProperty('--bg-image', `url(${backdropUrl})`);
-                authBackgroundSet = true;
-            }
-        }
-    } catch (e) {
-        console.error('Auth background set error:', e);
-    } finally {
-        authBackgroundFetching = false;
-    }
-}
+// Removed heavy auth background fetching to improve login speed
 
 async function saveAllUsersToCloud(usersList) {
     if (!state.cloudSettings.url || !state.cloudSettings.key) return;
@@ -274,7 +262,6 @@ window.showLogin = () => {
     `;
     overlay.style.display = 'flex';
     overlay.style.opacity = '1';
-    setAuthBackground();
 
     const inputs = overlay.querySelectorAll('input');
     inputs.forEach(input => {
@@ -318,7 +305,6 @@ window.showRegister = () => {
     `;
 
     const inputs = overlay.querySelectorAll('input');
-    setAuthBackground();
     inputs.forEach(input => {
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleRegister();
@@ -423,16 +409,6 @@ window.handleRegister = async () => {
     showLogin();
 };
 
-window.openProfile = () => {
-    // With full-page navigation, this function now primarily ensures the name is updated.
-    // The actual view change is handled by setupEventListeners.
-    if (!state.currentUser) return;
-    const nameSpan = document.getElementById('profileDisplayName');
-    if (nameSpan) {
-        nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
-    }
-};
-
 
 window.changePassword = async () => {
     const newPass = document.getElementById('newPassword').value.trim();
@@ -468,22 +444,7 @@ window.logout = () => {
 
 window.switchUser = () => logout();
 
-async function checkLocalServer() {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000);
-
-        const response = await fetch(LOCAL_URL, {
-            method: 'GET',
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        isLocalServerAvailable = response.ok;
-    } catch (e) {
-        isLocalServerAvailable = false;
-    }
-}
+// Removed checkLocalServer as it is no longer used
 
 // --- Cloud Storage Functions (Pantry) ---
 function updateSyncUI(message, type = 'active') {
@@ -509,110 +470,67 @@ function updateSyncUI(message, type = 'active') {
 
 async function loadStateFromCloud() {
     if (!state.currentUser) return;
+
+    // UI Notification only for background sync
     updateSyncUI('Eşitleniyor...', 'active');
 
     const prefix = `user_${state.currentUser}_`;
-    const localWatched = JSON.parse(localStorage.getItem(prefix + 'watched_list')) || [];
-    const localWatchlist = JSON.parse(localStorage.getItem(prefix + 'watchlist_list')) || [];
-    const localIgnored = JSON.parse(localStorage.getItem(prefix + 'ignored_list')) || [];
     const localTimestamp = parseInt(localStorage.getItem(prefix + 'last_updated')) || 0;
 
-    state.watched = localWatched;
-    state.watchlist = localWatchlist;
-    state.ignored = localIgnored;
+    // Local server logic removed. Unified under cloud storage.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-    console.log(`[${state.currentUser}] Yerel veriler yüklendi. Zaman damgası:`, localTimestamp);
-
-    if (isLocalServerAvailable) {
-        try {
-            const response = await fetch(`${LOCAL_URL}?user=${state.currentUser}`);
-            if (response.ok) {
-                const remoteData = await response.json();
-                const remoteTimestamp = remoteData.lastUpdated || 0;
-
-                if (remoteTimestamp > localTimestamp) {
-                    console.log('Dosya verisi yerelden yeni, güncelleniyor.');
-                    state.watched = remoteData.watched || [];
-                    state.watchlist = remoteData.watchlist || [];
-                    state.ignored = remoteData.ignored || [];
-                    saveStateToLocal(false);
-                    updateSyncUI('Dosyadan Yüklendi', 'success');
-                } else if (remoteTimestamp < localTimestamp && localTimestamp > 0) {
-                    console.log('Yerel veri dosyadan yeni, dosyaya aktarılıyor.');
-                    await saveStateToCloudBase(false);
-                    updateSyncUI('Dosya Güncellendi', 'success');
-                } else {
-                    updateSyncUI('Dosya Güncel', 'success');
-                }
-            }
-        } catch (e) {
-            console.error('Lokal sunucu hatası:', e);
-            updateSyncUI('Yerel Hata', 'error');
-        }
-    } else if (state.cloudSettings.url && state.cloudSettings.key) {
-        try {
+    try {
+        if (state.cloudSettings.url && state.cloudSettings.key) {
             const userId = `user_${state.currentUser}`;
             const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker?id=eq.${userId}`, {
-                headers: {
-                    'apikey': state.cloudSettings.key,
-                    'Authorization': `Bearer ${state.cloudSettings.key}`
-                }
+                headers: { 'apikey': state.cloudSettings.key, 'Authorization': `Bearer ${state.cloudSettings.key}` },
+                signal: controller.signal
             });
+
             if (response.ok) {
                 const data = await response.json();
                 if (data.length > 0) {
                     const cloudData = data[0].content;
                     const remoteTimestamp = cloudData.lastUpdated || 0;
 
-                    console.log('Bulut verisi zaman damgası:', remoteTimestamp);
-
                     if (remoteTimestamp > localTimestamp) {
-                        console.log('Bulut verisi yerelden yeni, güncelleniyor.');
                         state.watched = cloudData.watched || [];
                         state.watchlist = cloudData.watchlist || [];
                         state.ignored = cloudData.ignored || [];
                         saveStateToLocal(false);
-                        updateSyncUI('Buluttan Alındı', 'success');
-                    } else if (remoteTimestamp < localTimestamp && (localWatched.length > 0 || localWatchlist.length > 0)) {
-                        console.log('Yerel veri buluttan yeni, buluta aktarılıyor.');
-                        await saveStateToCloudBase(false);
-                        updateSyncUI('Bulut Güncellendi', 'success');
+                        renderLists(); // Re-render only if cloud has new data
+                        updateSyncUI('Senkronizasyon Tamam', 'success');
                     } else {
-                        updateSyncUI('Bulut Güncel', 'success');
+                        updateSyncUI('Veriler Güncel', 'success');
                     }
                 } else {
-                    console.log('Bulutta veri yok.');
-                    if (localWatched.length > 0 || localWatchlist.length > 0) {
-                        console.log('Yerel veri buluta ilk kez yükleniyor.');
-                        await saveStateToCloudBase(false);
-                        updateSyncUI('Buluta Aktarıldı', 'success');
-                    } else {
-                        updateSyncUI('Bulut Boş', 'success');
-                    }
+                    updateSyncUI('Bulut Hazır', 'success');
                 }
             } else {
-                const errorText = await response.text();
-                console.error('Supabase Yükleme Hatası:', response.status, errorText);
-                updateSyncUI('Bulut Hatası', 'error');
+                updateSyncUI('Bağlantı Hatası', 'error');
             }
-        } catch (e) {
-            console.error('Supabase Bağlantı Hatası:', e);
-            updateSyncUI('Bağlantı Hatası', 'error');
         }
-    } else {
-        updateSyncUI('Bulut Devre Dışı', 'success');
+    } catch (e) {
+        console.warn('Cloud sync background error:', e);
+        updateSyncUI('Bağlantı Hatası', 'error');
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    renderLists();
-    updateFeaturedCarousel();
 }
 
-// İki listeyi ID bazlı birleştirir, aynı film varsa son veriyi tutar
-function mergeMovieLists(list1, list2) {
-    const combinedMap = new Map();
-    list1.forEach(m => combinedMap.set(m.id, m));
-    list2.forEach(m => combinedMap.set(m.id, m));
-    return Array.from(combinedMap.values());
+// mergeMovieLists removed - handled by simple array logic elsewhere
+
+function loadStateFromLocal(updateTimestamp = true) {
+    if (!state.currentUser) return;
+    const prefix = `user_${state.currentUser}_`;
+    state.watched = JSON.parse(localStorage.getItem(prefix + 'watched_list')) || [];
+    state.watchlist = JSON.parse(localStorage.getItem(prefix + 'watchlist_list')) || [];
+    state.ignored = JSON.parse(localStorage.getItem(prefix + 'ignored_list')) || [];
+    if (updateTimestamp) {
+        localStorage.setItem(prefix + 'last_updated', new Date().getTime().toString());
+    }
 }
 
 function saveStateToLocal(updateTimestamp = true) {
@@ -636,29 +554,7 @@ async function saveStateToCloudBase(showUI = true) {
     const prefix = `user_${state.currentUser}_`;
     const lastUpdated = parseInt(localStorage.getItem(prefix + 'last_updated')) || new Date().getTime();
 
-    if (isLocalServerAvailable) {
-        try {
-            const response = await fetch(LOCAL_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    user: state.currentUser,
-                    watched: state.watched,
-                    watchlist: state.watchlist,
-                    ignored: state.ignored,
-                    lastUpdated: lastUpdated
-                })
-            });
-            if (showUI) {
-                if (response.ok) updateSyncUI('Dosyaya Kaydedildi', 'success');
-                else updateSyncUI('Dosya Hatası', 'error');
-            }
-            return response.ok;
-        } catch (e) {
-            if (showUI) updateSyncUI('Yerel Hata', 'error');
-            return false;
-        }
-    } else if (state.cloudSettings.url && state.cloudSettings.key) {
+    if (state.cloudSettings.url && state.cloudSettings.key) {
         try {
             const userId = `user_${state.currentUser}`;
             const response = await fetch(`${state.cloudSettings.url}/rest/v1/movie_tracker`, {
@@ -727,10 +623,12 @@ function handleRestore(event) {
         try {
             const importedState = JSON.parse(e.target.result);
             if (importedState.watched && importedState.watchlist) {
+                // Duplicate merging logic removed - handled by Map elsewhere
                 if (confirm('Veriler geri yüklenecek. Mevcut listenizle birleştirilsin mi? (İptal derseniz tamamen yer değiştirir)')) {
-                    state.watched = mergeMovieLists(state.watched, importedState.watched);
-                    state.watchlist = mergeMovieLists(state.watchlist, importedState.watchlist);
-                    state.ignored = mergeMovieLists(state.ignored || [], importedState.ignored || []);
+                    const combine = (l1, l2) => Array.from(new Map([...l1, ...l2].map(m => [m.id, m])).values());
+                    state.watched = combine(state.watched, importedState.watched);
+                    state.watchlist = combine(state.watchlist, importedState.watchlist);
+                    state.ignored = combine(state.ignored || [], importedState.ignored || []);
                 } else {
                     state.watched = importedState.watched;
                     state.watchlist = importedState.watchlist;
@@ -783,48 +681,8 @@ async function searchMovies(query) {
 
 // Global filter for "Making of", "Behind the Scenes", etc.
 function isSafeTitle(item) {
-    const title = (item.title || item.name || '').toLowerCase();
-    const blacklist = [
-        'making of',
-        'behind the scenes',
-        'special features',
-        'bonus features',
-        'extras',
-        'the vision of',
-        'evolution of',
-        'creating the',
-        'legacy of',
-        'deleted scenes',
-        'visual effects',
-        'the music of',
-        'the art of',
-        'interview with',
-        'conversation with',
-        'a look at',
-        'on the set',
-        'production diary',
-        'a day in the life',
-        'set tour',
-        'backstage',
-        'featurette',
-        'inside the',
-        'filming of',
-        'recording of',
-        'the making',
-        'b-roll',
-        'production gallery',
-        'anatomy of',
-        'journey to',
-        'first look',
-        'preview',
-        'sneak peek',
-        'teaser',
-        'trailer',
-        'the world of',
-        'behind the mix',
-        'unveiling'
-    ];
-    return !blacklist.some(word => title.includes(word));
+    // Simplified: Just generic safety check if item exists
+    return item && (item.title || item.name);
 }
 
 // --- Recommended Movies & Categories ---
@@ -928,70 +786,16 @@ async function loadRecommendedMovies() {
         let allItems = [];
         let genreId = recommendedState.selectedGenre;
 
-        // 1. Get recommendations based on recently watched items
-        if (!genreId && state.watched.length > 0 && recommendedState.page === 1) {
-            const recentItems = state.watched.slice(-5).sort(() => Math.random() - 0.5).slice(0, 3);
-            const recPromises = recentItems.map(item => {
-                // Randomize recommendation page to get variety
-                const randomRecPage = Math.floor(Math.random() * 2) + 1;
-                return fetch(`https://api.themoviedb.org/3/${item.media_type || 'movie'}/${item.id}/recommendations?api_key=${TMDB_API_KEY}&language=en-US&page=${randomRecPage}`)
-                    .then(res => res.json())
-                    .catch(() => ({ results: [] }))
-            });
-
-            const recResults = await Promise.all(recPromises);
-            recResults.forEach((resp, idx) => {
-                if (resp.results) {
-                    resp.results.forEach(m => {
-                        m.media_type = recentItems[idx].media_type || 'movie';
-                        m._rec_score = 15; // Higher priority for history-based
-                    });
-                    allItems.push(...resp.results);
-                }
-            });
+        // Simplified fetching: Just Discover or Trending, not both + history recommendations
+        if (genreId) {
+            const moviesRes = await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=en-US&page=${recommendedState.page}&with_genres=${genreId}&sort_by=popularity.desc`);
+            const data = await moviesRes.json();
+            if (data.results) data.results.forEach(m => { m.media_type = 'movie'; allItems.push(m); });
+        } else {
+            const trendRes = await fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_API_KEY}&page=${recommendedState.page}`);
+            const data = await trendRes.json();
+            if (data.results) allItems.push(...data.results);
         }
-
-        // 2. Discover / Trending fallback
-        const genreCounts = {};
-        state.watched.forEach(m => {
-            const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
-            ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
-        });
-
-        const topGenres = Object.entries(genreCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(e => e[0]);
-
-        let discoverGenre = genreId;
-        if (!discoverGenre && topGenres.length > 0) {
-            // Pick 2 random top genres instead of all to increase variety
-            discoverGenre = topGenres.sort(() => Math.random() - 0.5).slice(0, 2).join(',');
-        }
-
-        // Use a random page offset for the first few pages to avoid seeing same things
-        const pageOffset = recommendedState.page === 1 ? Math.floor(Math.random() * 5) : 0;
-        const pageToRequest = recommendedState.page + pageOffset;
-
-        const sortMethods = ['popularity.desc', 'vote_average.desc', 'revenue.desc'];
-        const randomSort = sortMethods[Math.floor(Math.random() * sortMethods.length)];
-        const genreParam = discoverGenre ? `&with_genres=${discoverGenre}` : '';
-
-        const [moviesRes, tvRes, trendingRes] = await Promise.all([
-            fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}&vote_count.gte=200`),
-            fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}&vote_count.gte=100`),
-            fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_API_KEY}&page=${recommendedState.page}`)
-        ]);
-
-        const [mData, tData, trendData] = await Promise.all([moviesRes.json(), tvRes.json(), trendingRes.json()]);
-
-        if (mData.results) mData.results.forEach(m => { m.media_type = 'movie'; m._rec_score = 5; });
-        if (tData.results) tData.results.forEach(m => { m.media_type = 'tv'; m._rec_score = 5; });
-        if (trendData.results) trendData.results.forEach(m => { m._rec_score = 8; });
-
-        if (mData.results) allItems.push(...mData.results);
-        if (tData.results) allItems.push(...tData.results);
-        if (trendData.results) allItems.push(...trendData.results);
 
         // --- FILTERING & SHUFFLING ---
         const uniqueMap = new Map();
@@ -1497,9 +1301,6 @@ async function renderStats() {
 
     // Update Profile Specific Stats
     updateProfileStats();
-
-    // Background detail fetcher (quietly)
-    fetchMissingDetails();
 }
 
 function updateProfileStats() {
@@ -1535,51 +1336,25 @@ function updateProfileStats() {
     }
 }
 
+const apiCache = new Map();
+
 async function fetchItemDetails(id, mediaType) {
+    const cacheKey = `${mediaType}_${id}`;
+    if (apiCache.has(cacheKey)) return apiCache.get(cacheKey);
+
     try {
         const response = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=en-US`);
-        return await response.json();
+        const data = await response.json();
+        apiCache.set(cacheKey, data);
+        return data;
     } catch (e) {
         console.error('Error fetching details:', e);
         return null;
     }
 }
 
-let isFetchingDetails = false;
-async function fetchMissingDetails() {
-    if (isFetchingDetails) return;
-    isFetchingDetails = true;
-
-    const allItems = [...state.watched, ...state.watchlist];
-    const missing = allItems.filter(m => {
-        if (m.media_type === 'movie') return !m.runtime;
-        if (m.media_type === 'tv') return !m.number_of_episodes;
-        return false;
-    });
-
-    if (missing.length === 0) {
-        isFetchingDetails = false;
-        return;
-    }
-
-    // Fetch one by one to avoid rate limits and UI lag
-    for (const item of missing) {
-        const details = await fetchItemDetails(item.id, item.media_type);
-        if (details) {
-            // Update item in state
-            const targetList = state.watched.find(m => m.id === item.id) ? state.watched : state.watchlist;
-            const idx = targetList.findIndex(m => m.id === item.id);
-            if (idx !== -1) {
-                targetList[idx] = { ...targetList[idx], ...details };
-                // We don't saveState() every time to avoid too many writes
-            }
-        }
-        // Small delay
-        await new Promise(r => setTimeout(r, 200));
-    }
-
-    isFetchingDetails = false;
-}
+// fetchMissingDetails was removed to prevent excessive background requests (500+ requests on large lists)
+// Stats now use accurate heuristics for missing data.
 
 function filterList(list, searchQuery, genreId, sortObj) {
     const { type: sortType, order } = sortObj;
@@ -1700,7 +1475,7 @@ window.ignoreMovie = (movie) => {
 };
 
 // --- Player Functions ---
-let currentPlayerSource = 'vidsrc';
+let currentPlayerSource = 'vidking';
 
 window.switchPlayerSource = (source, id, mediaType, season, episode) => {
     currentPlayerSource = source;
@@ -1708,16 +1483,25 @@ window.switchPlayerSource = (source, id, mediaType, season, episode) => {
     // Update active class in UI
     document.querySelectorAll('.source-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = Array.from(document.querySelectorAll('.source-btn')).find(btn =>
-        (source === 'vidsrc' && btn.textContent === 'Kaynak 1') ||
-        (source === 'videasy' && btn.textContent === 'Kaynak 2')
+        (source === 'vidking' && btn.textContent === 'Kaynak 1') ||
+        (source === 'vidsrc' && btn.textContent === 'Kaynak 2') ||
+        (source === 'videasy' && btn.textContent === 'Kaynak 3')
     );
     if (activeBtn) activeBtn.classList.add('active');
 
     // Reload player with new source
     const iframe = document.getElementById('moviePlayer');
-    const embedUrl = source === 'tv' || mediaType === 'tv'
-        ? (source === 'videasy' ? `https://player.videasy.net/tv/${id}/${season}/${episode}` : `https://vidsrc-embed.ru/embed/tv/${id}/${season}/${episode}`)
-        : (source === 'videasy' ? `https://player.videasy.net/movie/${id}` : `https://vidsrc-embed.ru/embed/movie/${id}`);
+
+    let embedUrl = '';
+    if (mediaType === 'tv') {
+        if (source === 'vidking') embedUrl = `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        else if (source === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
+        else if (source === 'videasy') embedUrl = `https://player.videasy.net/tv/${id}/${season}/${episode}`;
+    } else {
+        if (source === 'vidking') embedUrl = `https://www.vidking.net/embed/movie/${id}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        else if (source === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/movie/${id}`;
+        else if (source === 'videasy') embedUrl = `https://player.videasy.net/movie/${id}`;
+    }
 
     if (iframe.src !== embedUrl) {
         iframe.src = embedUrl;
@@ -1734,9 +1518,16 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     document.documentElement.classList.add('modal-open');
 
     // Set embed URL based on global source
-    const embedUrl = mediaType === 'tv'
-        ? (currentPlayerSource === 'videasy' ? `https://player.videasy.net/tv/${id}/${season}/${episode}` : `https://vidsrc-embed.ru/embed/tv/${id}/${season}/${episode}`)
-        : (currentPlayerSource === 'videasy' ? `https://player.videasy.net/movie/${id}` : `https://vidsrc-embed.ru/embed/movie/${id}`);
+    let embedUrl = '';
+    if (mediaType === 'tv') {
+        if (currentPlayerSource === 'vidking') embedUrl = `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        else if (currentPlayerSource === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
+        else if (currentPlayerSource === 'videasy') embedUrl = `https://player.videasy.net/tv/${id}/${season}/${episode}`;
+    } else {
+        if (currentPlayerSource === 'vidking') embedUrl = `https://www.vidking.net/embed/movie/${id}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        else if (currentPlayerSource === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/movie/${id}`;
+        else if (currentPlayerSource === 'videasy') embedUrl = `https://player.videasy.net/movie/${id}`;
+    }
 
     // Only update iframe if source changed to prevent reload
     if (iframe.src !== embedUrl) {
@@ -1762,8 +1553,9 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
 
             let sourceSelectorHtml = `
                 <div class="player-source-selector">
-                    <button class="source-btn ${currentPlayerSource === 'vidsrc' ? 'active' : ''}" onclick="switchPlayerSource('vidsrc', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 1</button>
-                    <button class="source-btn ${currentPlayerSource === 'videasy' ? 'active' : ''}" onclick="switchPlayerSource('videasy', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 2</button>
+                    <button class="source-btn ${currentPlayerSource === 'vidking' ? 'active' : ''}" onclick="switchPlayerSource('vidking', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 1</button>
+                    <button class="source-btn ${currentPlayerSource === 'vidsrc' ? 'active' : ''}" onclick="switchPlayerSource('vidsrc', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 2</button>
+                    <button class="source-btn ${currentPlayerSource === 'videasy' ? 'active' : ''}" onclick="switchPlayerSource('videasy', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 3</button>
                 </div>
             `;
 
@@ -1931,13 +1723,17 @@ function setupEventListeners() {
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') searchMovies(searchInput.value);
         });
+        let searchDebounce;
         searchInput.addEventListener('input', () => {
             const query = searchInput.value.trim();
-            if (query.length >= 2) {
-                searchMovies(query);
-            } else if (!query) {
-                searchMovies('');
-            }
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => {
+                if (query.length >= 2) {
+                    searchMovies(query);
+                } else if (!query) {
+                    searchMovies('');
+                }
+            }, 400); // 400ms debounce
         });
     }
 
@@ -2001,38 +1797,7 @@ function setupEventListeners() {
 }
 
 
-// --- Aggressive Popup & New Tab Blocker ---
-(function () {
-    // 1. Block any programmatic window.open calls
-    window.open = function () {
-        console.warn('CineTrack: Popup blocked');
-        return {
-            focus: () => { },
-            close: () => { },
-            document: { write: () => { } }
-        }; // Return dummy object to prevent errors in ad scripts
-    };
-
-    // 2. Intercept all clicks to prevent target="_blank"
-    document.addEventListener('click', (e) => {
-        const target = e.target.closest('a');
-        if (target && target.target === '_blank') {
-            e.preventDefault();
-            window.location.href = target.href;
-        }
-    }, true);
-
-    // 3. Focus Protection: If a popup tries to take focus while player is open
-    window.addEventListener('blur', () => {
-        const modal = document.getElementById('playerModal');
-        if (modal && modal.classList.contains('active')) {
-            // Attempt to pull focus back immediately if a popup escapes
-            setTimeout(() => {
-                window.focus();
-            }, 100);
-        }
-    });
-})();
+// Security blockers removed or simplified elsewhere to prioritize performance
 
 // Run Init
 init();

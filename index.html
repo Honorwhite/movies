@@ -21,6 +21,15 @@
 </head>
 
 <body>
+    <div id="appLoader" class="app-loader">
+        <div class="loader-content">
+            <div class="loader-logo">CineTrack</div>
+            <div class="loader-spinner-container">
+                <div class="loader-spinner"></div>
+            </div>
+            <p class="loader-text">Datalar Hazırlanıyor...</p>
+        </div>
+    </div>
     <div id="userSelectionOverlay" class="user-selection-overlay">
         <div class="user-selection-content glass" id="authContainer">
             <!-- Content will be populated by script.js (showLogin/showRegister) -->
@@ -307,7 +316,8 @@
             <button class="close-player" onclick="closePlayer()"><i class="fas fa-times"></i></button>
             <div class="player-wrapper">
                 <iframe id="moviePlayer" src="" frameborder="0"
-                    allow="autoplay; fullscreen; picture-in-picture; xr-spatial-tracking; clipboard-write"></iframe>
+                    allow="autoplay; fullscreen; picture-in-picture; xr-spatial-tracking; clipboard-write; encrypted-media; gyroscope; accelerometer"
+                    allowfullscreen webkitallowfullscreen mozallowfullscreen></iframe>
             </div>
             <div class="player-info" id="playerInfo">
                 <!-- Movie info will be here -->
