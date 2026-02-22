@@ -109,8 +109,10 @@
                 <h3 class="section-title">Önerilen Film & Diziler</h3>
 
                 <div class="categories-container">
-                    <div id="genreChips" class="genre-chips">
-                        <!-- Genre chips will be injected here -->
+                    <div class="genre-chips-wrapper">
+                        <div id="genreChips" class="genre-chips">
+                            <!-- Genre chips will be injected here -->
+                        </div>
                     </div>
                 </div>
 
@@ -148,8 +150,10 @@
                 <!-- Stats will be injected here -->
             </div>
             <div class="categories-container">
-                <div id="watchedGenreChips" class="genre-chips">
-                    <!-- Genre chips will be injected here -->
+                <div class="genre-chips-wrapper">
+                    <div id="watchedGenreChips" class="genre-chips">
+                        <!-- Genre chips will be injected here -->
+                    </div>
                 </div>
             </div>
             <div id="watchedList" class="movie-grid">
@@ -181,8 +185,10 @@
                 <!-- Stats will be injected here -->
             </div>
             <div class="categories-container">
-                <div id="watchlistGenreChips" class="genre-chips">
-                    <!-- Genre chips will be injected here -->
+                <div class="genre-chips-wrapper">
+                    <div id="watchlistGenreChips" class="genre-chips">
+                        <!-- Genre chips will be injected here -->
+                    </div>
                 </div>
             </div>
             <div id="watchlist" class="movie-grid">
@@ -193,32 +199,106 @@
         <!-- Profile View -->
         <section id="profileView" class="view">
             <div class="view-header">
-                <h2>Profil Ayarları</h2>
+                <h2>Profil Paneli</h2>
             </div>
 
-            <div class="profile-container">
-                <div class="profile-card glass">
-                    <div class="profile-header-main">
-                        <div class="profile-avatar"><i class="fas fa-user-circle"></i></div>
-                        <h3 id="profileDisplayName">Kullanıcı Adı</h3>
-                        <p class="profile-status">Aktif Oturum</p>
+            <div class="profile-dashboard">
+                <!-- User Overview Card -->
+                <div class="profile-main-card glass">
+                    <div class="profile-avatar-wrapper">
+                        <div class="profile-avatar" id="profileAvatar">
+                            <i class="fas fa-user-astronaut"></i>
+                        </div>
+                        <div class="avatar-edit-badge" title="Avatarı Değiştir">
+                            <i class="fas fa-camera"></i>
+                        </div>
                     </div>
+                    <div class="profile-info-main">
+                        <h3 id="profileDisplayName">Kullanıcı Adı</h3>
+                        <div class="profile-badges">
+                            <span class="badge status-badge"><i class="fas fa-circle"></i> Çevrimiçi</span>
+                            <span class="badge rank-badge"><i class="fas fa-award"></i> Sinefil</span>
+                        </div>
+                    </div>
+                </div>
 
-                    <div class="profile-section">
-                        <h4>Şifre Değiştir</h4>
-                        <div class="auth-form">
+                <!-- Stats Grid in Profile -->
+                <div class="profile-stats-container">
+                    <div class="stat-box glass">
+                        <div class="stat-box-icon" style="color: var(--primary)"><i class="fas fa-film"></i></div>
+                        <div class="stat-box-data">
+                            <h4 id="profileMovieCount">0</h4>
+                            <span>İzlenen Film</span>
+                        </div>
+                    </div>
+                    <div class="stat-box glass">
+                        <div class="stat-box-icon" style="color: var(--secondary)"><i class="fas fa-tv"></i></div>
+                        <div class="stat-box-data">
+                            <h4 id="profileTvCount">0</h4>
+                            <span>İzlenen Dizi</span>
+                        </div>
+                    </div>
+                    <div class="stat-box glass">
+                        <div class="stat-box-icon" style="color: var(--accent-good)"><i class="fas fa-history"></i>
+                        </div>
+                        <div class="stat-box-data">
+                            <h4 id="profileTotalTime">0s</h4>
+                            <span>Toplam Süre</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings & Actions -->
+                <div class="settings-grid">
+                    <!-- Security Card -->
+                    <div class="settings-card glass">
+                        <div class="settings-card-header">
+                            <i class="fas fa-shield-alt"></i>
+                            <h4>Hesap Güvenliği</h4>
+                        </div>
+                        <div class="settings-card-body">
                             <div class="input-group">
-                                <input type="password" id="newPassword" placeholder="Yeni Şifre">
+                                <label>Yeni Şifre</label>
+                                <input type="password" id="newPassword" placeholder="••••••••"
+                                    autocomplete="new-password">
                             </div>
-                            <div id="profileMsg" style="font-size: 0.8rem; margin-top: -0.5rem; display: none;"></div>
-                            <button class="primary-btn" onclick="changePassword()">Şifreyi Güncelle</button>
+                            <div id="profileMsg" class="status-msg"></div>
+                            <button class="action-btn primary-btn" onclick="changePassword()">
+                                <i class="fas fa-key"></i> Şifreyi Güncelle
+                            </button>
                         </div>
                     </div>
 
-                    <div class="profile-section logout-section">
-                        <button class="secondary-btn logout-full-btn" onclick="logout()">
-                            <i class="fas fa-sign-out-alt"></i> Oturumu Kapat
-                        </button>
+                    <!-- App Actions Card -->
+                    <div class="settings-card glass">
+                        <div class="settings-card-header">
+                            <i class="fas fa-cog"></i>
+                            <h4>Uygulama Seçenekleri</h4>
+                        </div>
+                        <div class="settings-card-body">
+                            <div class="action-list">
+                                <button class="action-item" onclick="downloadData()">
+                                    <div class="action-item-info">
+                                        <i class="fas fa-download"></i>
+                                        <span>Yedek Oluştur</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                                <div class="action-item" onclick="document.getElementById('restoreFile').click()">
+                                    <div class="action-item-info">
+                                        <i class="fas fa-upload"></i>
+                                        <span>Yedeği Geri Yükle</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right"></i>
+                                </div>
+                                <button class="action-item logout-item" onclick="logout()">
+                                    <div class="action-item-info">
+                                        <i class="fas fa-sign-out-alt"></i>
+                                        <span>Oturumu Kapat</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

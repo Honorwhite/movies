@@ -199,6 +199,26 @@ async function fetchUsersFromCloud() {
     }
 }
 
+async function setAuthBackground() {
+    try {
+        const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}`);
+        const data = await response.json();
+        if (data.results && data.results.length > 0) {
+            const randomMovie = data.results[Math.floor(Math.random() * data.results.length)];
+            const backdropUrl = `https://image.tmdb.org/t/p/w1280${randomMovie.backdrop_path}`;
+            document.documentElement.style.setProperty('--auth-bg', `url(${backdropUrl})`);
+
+            // Apply to the overlay's specialized background element
+            const overlay = document.getElementById('userSelectionOverlay');
+            if (overlay) {
+                overlay.style.setProperty('--bg-image', `url(${backdropUrl})`);
+            }
+        }
+    } catch (e) {
+        console.error('Auth background set error:', e);
+    }
+}
+
 async function saveAllUsersToCloud(usersList) {
     if (!state.cloudSettings.url || !state.cloudSettings.key) return;
     try {
@@ -223,27 +243,31 @@ async function saveAllUsersToCloud(usersList) {
 window.showLogin = () => {
     const overlay = document.getElementById('userSelectionOverlay');
     overlay.innerHTML = `
-        <div class="user-selection-content glass">
-            <h2>Giriş Yap</h2>
+        <div class="user-selection-content glass auth-card">
             <div class="auth-form">
                 <div class="input-group">
-                    <input type="text" id="loginUsername" placeholder="Kullanıcı Adı" autocomplete="username">
+                    <label><i class="fas fa-user"></i> Kullanıcı Adı</label>
+                    <input type="text" id="loginUsername" placeholder="Kullanıcı adınızı girin" autocomplete="username">
                 </div>
                 <div class="input-group">
-                    <input type="password" id="loginPassword" placeholder="Şifre" autocomplete="current-password">
+                    <label><i class="fas fa-lock"></i> Şifre</label>
+                    <input type="password" id="loginPassword" placeholder="Şifrenizi girin" autocomplete="current-password">
                 </div>
-                <div id="authError" style="color: var(--accent-bad); font-size: 0.8rem; display: none; margin-top: -0.5rem; margin-bottom: 0.5rem;"></div>
+                <div id="authError" class="status-msg error" style="display: none; margin-bottom: 1rem;"></div>
                 <div class="auth-actions">
-                    <button class="primary-btn" id="loginBtn" onclick="handleLogin()">Giriş</button>
-                    <button class="secondary-btn" onclick="showRegister()">Hesap Oluştur</button>
+                    <button class="primary-btn auth-main-btn" id="loginBtn" onclick="handleLogin()">
+                        <span>Giriş Yap</span> <i class="fas fa-arrow-right"></i>
+                    </button>
+                    <div class="auth-divider"><span>veya</span></div>
+                    <button class="secondary-btn auth-sub-btn" onclick="showRegister()">Hesap Oluştur</button>
                 </div>
             </div>
         </div>
     `;
     overlay.style.display = 'flex';
     overlay.style.opacity = '1';
+    setAuthBackground();
 
-    // Enter key support
     const inputs = overlay.querySelectorAll('input');
     inputs.forEach(input => {
         input.addEventListener('keypress', (e) => {
@@ -255,26 +279,38 @@ window.showLogin = () => {
 window.showRegister = () => {
     const overlay = document.getElementById('userSelectionOverlay');
     overlay.innerHTML = `
-        <div class="user-selection-content glass">
-            <h2>Hesap Oluştur</h2>
+        <div class="user-selection-content glass auth-card">
+            <div class="auth-header">
+                <h2>Yeni Hesap<span> Oluştur</span></h2>
+                <p>Kendi film listenizi yönetmeye bir adım kaldı</p>
+            </div>
             <div class="auth-form">
                 <div class="input-group">
-                    <input type="text" id="regUsername" placeholder="Kullanıcı Adı">
+                    <label><i class="fas fa-user"></i> Kullanıcı Adı</label>
+                    <input type="text" id="regUsername" placeholder="En az 3 karakter">
                 </div>
                 <div class="input-group">
-                    <input type="password" id="regPassword" placeholder="Şifre">
+                    <label><i class="fas fa-lock"></i> Şifre</label>
+                    <input type="password" id="regPassword" placeholder="Şifrenizi belirleyin">
                 </div>
-                <div id="authError" style="color: var(--accent-bad); font-size: 0.8rem; display: none; margin-top: -0.5rem; margin-bottom: 0.5rem;"></div>
+                <div class="input-group">
+                    <label><i class="fas fa-shield-alt"></i> Şifre Tekrar</label>
+                    <input type="password" id="regPasswordConfirm" placeholder="Şifrenizi tekrar girin">
+                </div>
+                <div id="authError" class="status-msg error" style="display: none; margin-bottom: 1rem;"></div>
                 <div class="auth-actions">
-                    <button class="primary-btn" id="regBtn" onclick="handleRegister()">Kayıt Ol</button>
-                    <button class="secondary-btn" onclick="showLogin()">Giriş'e Dön</button>
+                    <button class="primary-btn auth-main-btn" id="regBtn" onclick="handleRegister()">
+                        <span>Kayıt Ol</span> <i class="fas fa-check"></i>
+                    </button>
+                    <div class="auth-divider"><span>veya zaten hesabınız varsa</span></div>
+                    <button class="secondary-btn auth-sub-btn" onclick="showLogin()">Giriş Yap</button>
                 </div>
             </div>
         </div>
     `;
 
-    // Enter key support
     const inputs = overlay.querySelectorAll('input');
+    setAuthBackground();
     inputs.forEach(input => {
         input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleRegister();
@@ -321,6 +357,7 @@ window.handleLogin = async () => {
         overlay.style.opacity = '0';
         setTimeout(() => {
             overlay.style.display = 'none';
+            window.scrollTo(0, 0);
             init();
         }, 300);
     } else {
@@ -334,15 +371,24 @@ window.handleLogin = async () => {
 window.handleRegister = async () => {
     const userField = document.getElementById('regUsername');
     const passField = document.getElementById('regPassword');
+    const passConfirmField = document.getElementById('regPasswordConfirm');
     const regBtn = document.getElementById('regBtn');
     const errorDiv = document.getElementById('authError');
 
     const user = userField.value.trim().toLowerCase();
     const pass = passField.value.trim();
+    const passConfirm = passConfirmField.value.trim();
 
     if (user.length < 3 || pass.length < 3) {
-        errorDiv.textContent = 'En az 3 karakter olmalıdır.';
+        errorDiv.textContent = 'Kullanıcı adı ve şifre en az 3 karakter olmalıdır.';
         errorDiv.style.display = 'block';
+        return;
+    }
+
+    if (pass !== passConfirm) {
+        errorDiv.textContent = 'Şifreler birbiriyle eşleşmiyor!';
+        errorDiv.style.display = 'block';
+        passConfirmField.style.borderColor = 'var(--accent-bad)';
         return;
     }
 
@@ -382,12 +428,12 @@ window.openProfile = () => {
 
 window.changePassword = async () => {
     const newPass = document.getElementById('newPassword').value.trim();
-    const msgDiv = document.getElementById('profileMsg');
+    const msg = document.getElementById('profileMsg'); // Changed from msgDiv to msg
 
     if (newPass.length < 3) {
-        msgDiv.textContent = 'Şifre en az 3 karakter olmalıdır.';
-        msgDiv.style.color = 'var(--accent-bad)';
-        msgDiv.style.display = 'block';
+        msg.textContent = 'Şifre en az 3 karakter olmalıdır.';
+        msg.className = 'status-msg error'; // Updated class
+        msg.style.display = 'block';
         return;
     }
 
@@ -397,12 +443,12 @@ window.changePassword = async () => {
         localStorage.setItem('ct_users', JSON.stringify(state.users));
         await saveAllUsersToCloud(state.users);
 
-        msgDiv.textContent = 'Şifre başarıyla güncellendi!';
-        msgDiv.style.color = 'var(--accent-good)';
-        msgDiv.style.display = 'block';
+        msg.textContent = 'Şifre başarıyla güncellendi!';
+        msg.className = 'status-msg success';
+        msg.style.display = 'block';
         document.getElementById('newPassword').value = '';
         setTimeout(() => {
-            msgDiv.style.display = 'none';
+            msg.style.display = 'none';
         }, 3000);
     }
 };
@@ -873,104 +919,119 @@ async function loadRecommendedMovies() {
         let allItems = [];
         let genreId = recommendedState.selectedGenre;
 
-        // --- PERSONALIZATION LOGIC ---
+        // 1. Get recommendations based on recently watched items
         if (!genreId && state.watched.length > 0 && recommendedState.page === 1) {
-            // 1. Get recommendations based on recently watched items (Top 3 recent)
-            const recentItems = state.watched.slice(-3).reverse();
-            const recPromises = recentItems.map(item =>
-                fetch(`https://api.themoviedb.org/3/${item.media_type || 'movie'}/${item.id}/recommendations?api_key=${TMDB_API_KEY}&language=en-US&page=1`)
+            const recentItems = state.watched.slice(-5).sort(() => Math.random() - 0.5).slice(0, 3);
+            const recPromises = recentItems.map(item => {
+                // Randomize recommendation page to get variety
+                const randomRecPage = Math.floor(Math.random() * 2) + 1;
+                return fetch(`https://api.themoviedb.org/3/${item.media_type || 'movie'}/${item.id}/recommendations?api_key=${TMDB_API_KEY}&language=en-US&page=${randomRecPage}`)
                     .then(res => res.json())
                     .catch(() => ({ results: [] }))
-            );
+            });
 
             const recResults = await Promise.all(recPromises);
             recResults.forEach((resp, idx) => {
                 if (resp.results) {
                     resp.results.forEach(m => {
                         m.media_type = recentItems[idx].media_type || 'movie';
-                        m._rec_score = 10; // High priority for direct recommendations
+                        m._rec_score = 15; // Higher priority for history-based
                     });
                     allItems.push(...resp.results);
                 }
             });
         }
 
-        // 2. Fallback or Supplementary Discovery based on top genres
-        if (allItems.length < 20 || genreId) {
-            const genreCounts = {};
-            state.watched.forEach(m => {
-                const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
-                ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
-            });
+        // 2. Discover / Trending fallback
+        const genreCounts = {};
+        state.watched.forEach(m => {
+            const ids = m.genre_ids || (m.genres ? m.genres.map(g => g.id) : []);
+            ids.forEach(id => genreCounts[id] = (genreCounts[id] || 0) + 1);
+        });
 
-            const topGenres = Object.entries(genreCounts)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 3)
-                .map(e => e[0]);
+        const topGenres = Object.entries(genreCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(e => e[0]);
 
-            let discoverGenre = genreId;
-            if (!discoverGenre && topGenres.length > 0) {
-                // Pick a random one from top 3 for the search, or use comma-separated for 'OR'
-                discoverGenre = topGenres.join(',');
-            }
-
-            const pageToRequest = recommendedState.page;
-            const sortMethod = 'popularity.desc';
-            const genreParam = discoverGenre ? `&with_genres=${discoverGenre}` : '';
-
-            const [moviesRes, tvRes] = await Promise.all([
-                fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${sortMethod}${genreParam}&vote_count.gte=100`),
-                fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${sortMethod}${genreParam}&vote_count.gte=50`)
-            ]);
-
-            const [mData, tData] = await Promise.all([moviesRes.json(), tvRes.json()]);
-
-            if (mData.results) mData.results.forEach(m => { m.media_type = 'movie'; m._rec_score = 5; });
-            if (tData.results) tData.results.forEach(m => { m.media_type = 'tv'; m._rec_score = 5; });
-
-            if (mData.results) allItems.push(...mData.results);
-            if (tData.results) allItems.push(...tData.results);
+        let discoverGenre = genreId;
+        if (!discoverGenre && topGenres.length > 0) {
+            // Pick 2 random top genres instead of all to increase variety
+            discoverGenre = topGenres.sort(() => Math.random() - 0.5).slice(0, 2).join(',');
         }
 
-        // --- FILTERING & RANKING ---
-        // 1. Unique items by ID
+        // Use a random page offset for the first few pages to avoid seeing same things
+        const pageOffset = recommendedState.page === 1 ? Math.floor(Math.random() * 5) : 0;
+        const pageToRequest = recommendedState.page + pageOffset;
+
+        const sortMethods = ['popularity.desc', 'vote_average.desc', 'revenue.desc'];
+        const randomSort = sortMethods[Math.floor(Math.random() * sortMethods.length)];
+        const genreParam = discoverGenre ? `&with_genres=${discoverGenre}` : '';
+
+        const [moviesRes, tvRes, trendingRes] = await Promise.all([
+            fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}&vote_count.gte=200`),
+            fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&language=en-US&page=${pageToRequest}&sort_by=${randomSort}${genreParam}&vote_count.gte=100`),
+            fetch(`https://api.themoviedb.org/3/trending/all/day?api_key=${TMDB_API_KEY}&page=${recommendedState.page}`)
+        ]);
+
+        const [mData, tData, trendData] = await Promise.all([moviesRes.json(), tvRes.json(), trendingRes.json()]);
+
+        if (mData.results) mData.results.forEach(m => { m.media_type = 'movie'; m._rec_score = 5; });
+        if (tData.results) tData.results.forEach(m => { m.media_type = 'tv'; m._rec_score = 5; });
+        if (trendData.results) trendData.results.forEach(m => { m._rec_score = 8; });
+
+        if (mData.results) allItems.push(...mData.results);
+        if (tData.results) allItems.push(...tData.results);
+        if (trendData.results) allItems.push(...trendData.results);
+
+        // --- FILTERING & SHUFFLING ---
         const uniqueMap = new Map();
         allItems.forEach(item => {
-            if (!uniqueMap.has(item.id)) uniqueMap.set(item.id, item);
-            else {
-                // If already exists, maybe boost score?
-                const existing = uniqueMap.get(item.id);
-                existing._rec_score = (existing._rec_score || 0) + 2;
+            if (!item || !item.id) return;
+            const itemId = Number(item.id);
+            if (!uniqueMap.has(itemId)) {
+                uniqueMap.set(itemId, item);
+            } else {
+                const existing = uniqueMap.get(itemId);
+                existing._rec_score = (Number(existing._rec_score) || 0) + 5;
             }
         });
 
-        const sortedItems = Array.from(uniqueMap.values()).sort((a, b) => {
-            // Sort by recommendation score + weighted popularity/rating
-            const scoreA = (a._rec_score || 0) + (a.vote_average || 0) / 2;
-            const scoreB = (b._rec_score || 0) + (b.vote_average || 0) / 2;
+        // Convert to array and shuffle for variety
+        let itemsPool = Array.from(uniqueMap.values());
+
+        const filteredItems = itemsPool.filter(item => {
+            const itemId = Number(item.id);
+            const isInWatched = state.watched.some(m => Number(m.id) === itemId);
+            const isInWatchlist = state.watchlist.some(m => Number(m.id) === itemId);
+            const isIgnored = state.ignored.some(m => Number(m.id) === itemId);
+            const isAlreadyLoaded = recommendedState.loadedMovies.some(m => Number(m.id) === itemId);
+
+            const hasValidPoster = item.poster_path;
+            const isSafe = isSafeTitle(item);
+
+            // Quality threshold
+            const isQuality = Number(item.vote_average) >= 6.0 && Number(item.vote_count) > 50;
+            const releaseDate = item.release_date || item.first_air_date;
+            const year = releaseDate ? new Date(releaseDate).getFullYear() : 0;
+
+            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isQuality && isSafe && (year >= 1995 || item.vote_average >= 8);
+        });
+
+        // Shuffle pool after filtering
+        const shuffled = filteredItems.sort(() => Math.random() - 0.5);
+
+        // Sort by final score (rec_score + rating)
+        const finalSorted = shuffled.sort((a, b) => {
+            const scoreA = (Number(a._rec_score) || 0) + (Number(a.vote_average) || 0);
+            const scoreB = (Number(b._rec_score) || 0) + (Number(b.vote_average) || 0);
             return scoreB - scoreA;
         });
 
-        const filteredItems = sortedItems.filter(item => {
-            const isInWatched = state.watched.some(m => m.id === item.id);
-            const isInWatchlist = state.watchlist.some(m => m.id === item.id);
-            const isIgnored = state.ignored.some(m => m.id === item.id);
-            const isAlreadyLoaded = recommendedState.loadedMovies.some(m => m.id === item.id);
-            const hasValidPoster = item.poster_path;
-
-            // Release date check (stay away from very old stuff unless highly rated)
-            const releaseDate = item.release_date || item.first_air_date;
-            const year = releaseDate ? new Date(releaseDate).getFullYear() : 0;
-            const isQuality = item.vote_average >= 5.5 && item.vote_count > 10;
-            const isSafe = isSafeTitle(item);
-
-            return !isInWatched && !isInWatchlist && !isIgnored && !isAlreadyLoaded && hasValidPoster && isQuality && isSafe && (year >= 1990 || item.vote_average >= 8);
-        });
-
-        const itemsToShow = filteredItems.slice(0, 12);
+        const itemsToShow = finalSorted.slice(0, 24);
 
         if (itemsToShow.length === 0) {
-            if (recommendedState.page < 50) {
+            if (recommendedState.page < 30) {
                 recommendedState.page++;
                 recommendedState.isLoading = false;
                 return setTimeout(loadRecommendedMovies, 100);
@@ -990,16 +1051,26 @@ async function loadRecommendedMovies() {
 
         recommendedState.page++;
 
+        requestAnimationFrame(() => {
+            const scrollHeight = document.documentElement.scrollHeight;
+            const clientHeight = window.innerHeight;
+            if (scrollHeight <= clientHeight + 300 && recommendedState.hasMore && !recommendedState.isLoading) {
+                loadRecommendedMovies();
+            }
+        });
+
     } catch (error) {
         console.error('Error loading recommended items:', error);
     } finally {
         recommendedState.isLoading = false;
         setTimeout(() => {
-            const rect = loadingIndicator.getBoundingClientRect();
-            if (rect.top < window.innerHeight + 100 && !recommendedState.isLoading && recommendedState.hasMore) {
-                const searchView = document.getElementById('searchView');
-                if (searchView && searchView.classList.contains('active')) {
-                    loadRecommendedMovies();
+            if (!recommendedState.isLoading && recommendedState.hasMore) {
+                const rect = loadingIndicator.getBoundingClientRect();
+                if (rect.top < window.innerHeight + 600) { // More aggressive check
+                    const searchView = document.getElementById('searchView');
+                    if (searchView && searchView.classList.contains('active')) {
+                        loadRecommendedMovies();
+                    }
                 }
             }
         }, 300);
@@ -1010,7 +1081,7 @@ async function loadRecommendedMovies() {
 function setupInfiniteScroll() {
     const observerOptions = {
         root: null,
-        rootMargin: '0px 0px 1200px 0px',
+        rootMargin: '200px 0px 800px 0px',
         threshold: 0
     };
 
@@ -1031,21 +1102,20 @@ function setupInfiniteScroll() {
 
     if (loadingIndicator) observer.observe(loadingIndicator);
 
-    // Efficient throttled scroll listener
-    let scrollThrottled = false;
+    // Reliable scroll listener that checks distance from bottom
     window.addEventListener('scroll', () => {
-        if (!scrollThrottled) {
-            window.requestAnimationFrame(() => {
-                const scrollPos = window.innerHeight + window.scrollY;
-                const threshold = document.documentElement.scrollHeight - 1500;
-                if (scrollPos > threshold) {
-                    triggerLoading();
-                }
-                scrollThrottled = false;
-            });
-            scrollThrottled = true;
+        const scrollHeight = document.documentElement.scrollHeight;
+        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        const clientHeight = window.innerHeight;
+
+        // Trigger when within 1200px of bottom (increased for wide screens)
+        if ((scrollHeight - scrollTop - clientHeight) < 1200) {
+            triggerLoading();
         }
     }, { passive: true });
+
+    // Initial check to see if we need more content immediately
+    setTimeout(triggerLoading, 1000);
 }
 
 
@@ -1090,6 +1160,11 @@ async function updateHeroSection() {
 
     const renderMovie = (movie, immediate = false) => {
         heroMovieInfo.classList.remove('active');
+        const heroTitle = document.querySelector('.hero-content h1');
+        if (heroTitle) {
+            heroTitle.style.opacity = '0';
+            heroTitle.style.transform = 'translateY(10px)';
+        }
 
         const setup = () => {
             const title = movie.title || movie.name || movie.original_title || movie.original_name;
@@ -1100,10 +1175,18 @@ async function updateHeroSection() {
             heroBackdrop.style.opacity = '0';
 
             const injectContent = () => {
+                if (heroTitle) {
+                    heroTitle.textContent = title;
+                    setTimeout(() => {
+                        heroTitle.style.opacity = '1';
+                        heroTitle.style.transform = 'translateY(0)';
+                    }, 50);
+                }
+
                 heroMovieInfo.innerHTML = `
                     <div class="hero-actions">
                         <button class="hero-primary-btn" onclick="openPlayer(${movie.id}, '${movie.media_type || 'movie'}')" title="${title}">
-                            <i class="fas fa-play"></i> <span>${title}</span>
+                            <i class="fas fa-play"></i> <span>Hemen İzle</span>
                         </button>
                         <button class="hero-btn watchlist-btn" onclick="addToWatchlist(${JSON.stringify(movie).replace(/"/g, '&quot;')})">
                             <i class="fas fa-plus"></i> <span class="btn-text">Listeye Ekle</span>
@@ -1231,7 +1314,6 @@ function createMovieCard(movie, context) {
     const typeIcon = isTV ? '<i class="fas fa-layer-group"></i>' : '<i class="fas fa-film"></i>';
 
     card.innerHTML = `
-        ${isTV ? '<div class="poster-stack poster-stack-1"></div><div class="poster-stack poster-stack-2"></div>' : ''}
         <div class="poster-container" onclick="openPlayer(${movie.id}, '${movie.media_type || 'movie'}')" style="cursor: pointer;">
             ${removeBtnHtml}
             <div class="media-type-badge" title="${isTV ? 'Dizi' : 'Film'}">${typeIcon}</div>
@@ -1278,8 +1360,8 @@ function createMovieCard(movie, context) {
 
 // --- Sorting State ---
 let sortState = {
-    watched: 'abc', // 'abc', 'year', 'rating'
-    watchlist: 'abc'
+    watched: { type: 'abc', order: 'asc' }, // 'abc', 'year', 'rating'
+    watchlist: { type: 'abc', order: 'asc' }
 };
 
 function renderLists() {
@@ -1416,8 +1498,44 @@ async function renderStats() {
         </div>
     `;
 
+    // Update Profile Specific Stats
+    updateProfileStats();
+
     // Background detail fetcher (quietly)
     fetchMissingDetails();
+}
+
+function updateProfileStats() {
+    const movieCount = document.getElementById('profileMovieCount');
+    const tvCount = document.getElementById('profileTvCount');
+    const totalTime = document.getElementById('profileTotalTime');
+
+    if (!movieCount || !tvCount || !totalTime) return;
+
+    const watchedMovies = state.watched.filter(m => m.media_type === 'movie');
+    const watchedTV = state.watched.filter(m => m.media_type === 'tv');
+
+    let totalMinutes = 0;
+    watchedMovies.forEach(m => totalMinutes += m.runtime || 100);
+    watchedTV.forEach(m => {
+        const eps = m.number_of_episodes || (m.number_of_seasons ? m.number_of_seasons * 10 : 10);
+        const avgRuntime = (m.episode_run_time && m.episode_run_time[0]) || 45;
+        totalMinutes += eps * avgRuntime;
+    });
+
+    movieCount.textContent = watchedMovies.length;
+    tvCount.textContent = watchedTV.length;
+
+    if (totalMinutes < 60) {
+        totalTime.textContent = `${totalMinutes}dk`;
+    } else {
+        const hours = Math.floor(totalMinutes / 60);
+        if (hours > 24) {
+            totalTime.textContent = `${(hours / 24).toFixed(1)}g`;
+        } else {
+            totalTime.textContent = `${hours}sa`;
+        }
+    }
 }
 
 async function fetchItemDetails(id, mediaType) {
@@ -1466,7 +1584,9 @@ async function fetchMissingDetails() {
     isFetchingDetails = false;
 }
 
-function filterList(list, searchQuery, genreId, sortType = 'abc') {
+function filterList(list, searchQuery, genreId, sortObj) {
+    const { type: sortType, order } = sortObj;
+
     const filtered = list.filter(m => {
         const title = (m.title || m.name || '').toLowerCase();
         const searchMatch = !searchQuery || title.includes(searchQuery.toLowerCase());
@@ -1475,20 +1595,26 @@ function filterList(list, searchQuery, genreId, sortType = 'abc') {
     });
 
     return filtered.sort((a, b) => {
+        let res = 0;
         if (sortType === 'abc') {
             const titleA = (a.title || a.name || '').toLowerCase();
             const titleB = (b.title || b.name || '').toLowerCase();
-            return titleA.localeCompare(titleB, 'tr');
+            res = titleA.localeCompare(titleB, 'tr');
         } else if (sortType === 'year') {
             const yearA = parseInt((a.release_date || a.first_air_date || '0').split('-')[0]);
             const yearB = parseInt((b.release_date || b.first_air_date || '0').split('-')[0]);
-            return yearB - yearA; // Newest first
+            res = yearB - yearA; // Newest first by default (DESC)
         } else if (sortType === 'rating') {
             const rateA = a.vote_average || 0;
             const rateB = b.vote_average || 0;
-            return rateB - rateA; // Highest first
+            res = rateB - rateA; // Highest first by default (DESC)
         }
-        return 0;
+
+        if (order === 'asc') {
+            return sortType === 'abc' ? res : -res;
+        } else {
+            return sortType === 'abc' ? -res : res;
+        }
     });
 }
 
@@ -1683,13 +1809,9 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
                 <div class="player-description">
                     <p class="player-overview">${overview}</p>
                 </div>
-                <div id="playerUniverse" class="player-universe">
-                    <!-- Universe content will be loaded here -->
-                </div>
             `;
 
             updateModalFooter(movie);
-            loadUniverseContent(movie);
 
             if (mediaType === 'tv') {
                 loadEpisodes(id, season, episode);
@@ -1701,202 +1823,7 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
     }
 };
 
-// Global render task ID to prevent overlapping Universe list renders
-let currentUniverseRenderId = 0;
 
-function renderUniverseList(items) {
-    const listContainer = document.getElementById('universeList');
-    if (!listContainer) return;
-
-    if (items.length === 0) {
-        listContainer.innerHTML = '<p style="text-align:center; color:var(--text-dim); font-size:0.9rem;">Sonuç bulunamadı.</p>';
-        return;
-    }
-
-    const renderId = ++currentUniverseRenderId;
-    listContainer.innerHTML = '';
-    const chunkSize = 12;
-    let index = 0;
-
-    function renderChunk() {
-        // If a new render task has started, abort this one
-        if (renderId !== currentUniverseRenderId) return;
-
-        const chunk = items.slice(index, index + chunkSize);
-        const html = chunk.map(item => {
-            const itemTitle = item.title || item.name;
-            const itemYear = (item.release_date || item.first_air_date || '').split('-')[0] || 'N/A';
-            const itemRating = item.vote_average?.toFixed(1) || 'N/A';
-            const itemIcon = item.media_type === 'tv' ? 'fa-tv' : 'fa-film';
-            const posterUrl = item.poster_path
-                ? `https://image.tmdb.org/t/p/w92${item.poster_path}`
-                : `https://placehold.co/92x138/0f172a/FFF?text=Yok`;
-
-            return `
-                <div class="universe-item" onclick="openPlayer(${item.id}, '${item.media_type}')">
-                    <img src="${posterUrl}" alt="${itemTitle}" loading="lazy" onerror="this.src='https://placehold.co/92x138/0f172a/FFF?text=Yok'">
-                    <div class="universe-item-info">
-                        <h4>${itemTitle}</h4>
-                        <div class="universe-item-meta">
-                            <span><i class="far fa-calendar"></i> ${itemYear}</span>
-                            <span><i class="fas fa-star" style="color:#f59e0b"></i> ${itemRating}</span>
-                            <span><i class="fas ${itemIcon}"></i> ${item.media_type === 'tv' ? 'Dizi' : 'Film'}</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        listContainer.insertAdjacentHTML('beforeend', html);
-        index += chunkSize;
-
-        if (index < items.length) {
-            requestAnimationFrame(renderChunk);
-        }
-    }
-
-    renderChunk();
-}
-
-window.loadUniverseContent = async (movie) => {
-    const container = document.getElementById('playerUniverse');
-    if (!container) return;
-
-    const id = movie.id;
-    const mediaType = movie.media_type || 'movie';
-    const title = movie.title || movie.name;
-
-    // Major Studios Mapping
-    const franchiseMap = {
-        'Marvel Studios': { companyId: 420, keywordId: 180547 },
-        'Lucasfilm': { companyId: 1, keywordId: 161168 },
-        'DC Films': { companyId: 128064, keywordId: 8828 },
-        'DC Entertainment': { companyId: 9993, keywordId: 8828 },
-        'Pixar': { companyId: 3 },
-        'Walt Disney Animation Studios': { companyId: 6125 },
-        'Studio Ghibli': { companyId: 10341 },
-        'Wizarding World': { keywordId: 616 } // Harry Potter
-    };
-
-    let activeFranchise = null;
-    if (movie.production_companies) {
-        for (const company of movie.production_companies) {
-            if (franchiseMap[company.name]) {
-                activeFranchise = { ...franchiseMap[company.name], name: company.name };
-                break;
-            }
-        }
-    }
-
-    // Special case for Star Wars even if production company is missing (sometimes happens in TMDB data)
-    if (!activeFranchise && (title.includes('Star Wars') || title.includes('Yıldız Savaşları'))) {
-        activeFranchise = franchiseMap['Lucasfilm'];
-    }
-
-    // Determine Franchise Name for search fallback
-    let franchiseName = '';
-    if (movie.belongs_to_collection) {
-        franchiseName = movie.belongs_to_collection.name.replace(' Collection', '').replace(' Serisi', '');
-    } else {
-        franchiseName = title.split(':')[0].split(' - ')[0].trim();
-    }
-
-    container.innerHTML = `
-        <div class="universe-tabs">
-            <div class="universe-tab active" onclick="switchUniverseTab(this, 'main')">Ana Seri</div>
-            <div class="universe-tab" onclick="switchUniverseTab(this, 'saga')">Bütün Filmler</div>
-            <div class="universe-tab" onclick="switchUniverseTab(this, 'all')">Tüm Evren</div>
-        </div>
-        <div id="universeList" class="universe-content">
-            <div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
-        </div>
-    `;
-
-    const universeData = { main: [], saga: [], all: [] };
-
-    window.switchUniverseTab = async (tabElement, type) => {
-        container.querySelectorAll('.universe-tab').forEach(t => t.classList.remove('active'));
-        tabElement.classList.add('active');
-
-        const listContainer = document.getElementById('universeList');
-        listContainer.innerHTML = '<div class="loading-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>';
-
-        if (universeData[type].length > 0) {
-            renderUniverseList(universeData[type]);
-            return;
-        }
-
-        try {
-            let results = [];
-            if (type === 'main') {
-                if (movie.belongs_to_collection) {
-                    const res = await fetch(`https://api.themoviedb.org/3/collection/${movie.belongs_to_collection.id}?api_key=${TMDB_API_KEY}&language=en-US`);
-                    const data = await res.json();
-                    results = (data.parts || []).map(p => ({ ...p, media_type: 'movie' })).filter(isSafeTitle);
-                } else {
-                    const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
-                    const data = await res.json();
-                    results = (data.results || []).map(m => ({ ...m, media_type: 'movie' })).filter(isSafeTitle);
-                }
-            } else if (type === 'saga') {
-                if (activeFranchise && activeFranchise.companyId) {
-                    // Use production company filter for "same producer" accuracy
-                    const res = await fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=release_date.asc`);
-                    const data = await res.json();
-                    results = (data.results || []).map(m => ({ ...m, media_type: 'movie' }));
-                } else {
-                    const res = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
-                    const data = await res.json();
-                    results = (data.results || []).map(m => ({ ...m, media_type: 'movie' })).filter(isSafeTitle);
-                }
-            } else if (type === 'all') {
-                if (activeFranchise && activeFranchise.companyId) {
-                    // Multi-step discovery for better "Universe" coverage
-                    const [moviesRes, tvRes] = await Promise.all([
-                        fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=release_date.asc`),
-                        fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${TMDB_API_KEY}&with_companies=${activeFranchise.companyId}&language=en-US&sort_by=first_air_date.asc`)
-                    ]);
-                    const [mData, tData] = await Promise.all([moviesRes.json(), tvRes.json()]);
-                    results = [
-                        ...(mData.results || []).map(m => ({ ...m, media_type: 'movie' })),
-                        ...(tData.results || []).map(t => ({ ...t, media_type: 'tv' }))
-                    ];
-                } else {
-                    const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(franchiseName)}&language=en-US`);
-                    const data = await res.json();
-                    results = (data.results || []).filter(item => (item.media_type === 'movie' || item.media_type === 'tv') && isSafeTitle(item));
-                }
-            }
-
-            // Remove Making Of and Sort
-            results = results.filter(isSafeTitle);
-            results.sort((a, b) => {
-                const dateA = a.release_date || a.first_air_date || '0';
-                const dateB = b.release_date || b.first_air_date || '0';
-                return dateA.localeCompare(dateB);
-            });
-
-            // Unique items only
-            const unique = [];
-            const seen = new Set();
-            for (const item of results) {
-                if (!seen.has(`${item.id}_${item.media_type || 'movie'}`)) {
-                    unique.push(item);
-                    seen.add(`${item.id}_${item.media_type || 'movie'}`);
-                }
-            }
-
-            universeData[type] = unique;
-            renderUniverseList(unique);
-        } catch (e) {
-            console.error('Universe switch error:', e);
-            listContainer.innerHTML = '<p>Yüklenemedi.</p>';
-        }
-    };
-
-    // Initial load
-    switchUniverseTab(container.querySelector('.universe-tab'), 'main');
-};
 
 window.updateModalFooter = (movie) => {
     const playerFooter = document.getElementById('playerFooter');
@@ -2047,12 +1974,25 @@ function setupEventListeners() {
             const listType = btn.parentElement.getAttribute('data-list');
             const sortType = btn.getAttribute('data-sort');
 
-            // Update UI
-            btn.parentElement.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            if (sortState[listType].type === sortType) {
+                // Toggle order if clicking same type
+                sortState[listType].order = sortState[listType].order === 'asc' ? 'desc' : 'asc';
+            } else {
+                // Set new type and default order
+                sortState[listType].type = sortType;
+                sortState[listType].order = (sortType === 'abc' ? 'asc' : 'desc');
+            }
 
-            // Update State
-            sortState[listType] = sortType;
+            // Update UI for all buttons in this control
+            btn.parentElement.querySelectorAll('.sort-btn').forEach(b => {
+                b.classList.remove('active');
+                b.classList.remove('order-asc');
+                b.classList.remove('order-desc');
+            });
+
+            btn.classList.add('active');
+            btn.classList.add(`order-${sortState[listType].order}`);
+
             renderLists();
         });
     });
