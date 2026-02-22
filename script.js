@@ -125,6 +125,7 @@ async function init() {
         const nameSpan = document.getElementById('activeUserName');
         if (nameSpan) nameSpan.textContent = state.currentUser.charAt(0).toUpperCase() + state.currentUser.slice(1);
 
+        document.getElementById('searchView').classList.add('active'); // Activate search view
         updateHeroSection();
         await loadStateFromCloud();
         renderLists();
@@ -200,8 +201,10 @@ async function fetchUsersFromCloud() {
 }
 
 let authBackgroundSet = false;
+let authBackgroundFetching = false;
 async function setAuthBackground() {
-    if (authBackgroundSet) return;
+    if (authBackgroundSet || authBackgroundFetching) return;
+    authBackgroundFetching = true;
     try {
         const response = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${TMDB_API_KEY}`);
         const data = await response.json();
@@ -219,6 +222,8 @@ async function setAuthBackground() {
         }
     } catch (e) {
         console.error('Auth background set error:', e);
+    } finally {
+        authBackgroundFetching = false;
     }
 }
 
@@ -913,6 +918,7 @@ function selectGenre(genreId, chipElement) {
 }
 
 async function loadRecommendedMovies() {
+    if (!state.currentUser) return; // Don't fetch if not logged in
     if (recommendedState.isLoading || !recommendedState.hasMore) return;
 
     recommendedState.isLoading = true;
@@ -1156,6 +1162,7 @@ function updateFeaturedCarousel() {
 }
 
 async function updateHeroSection() {
+    if (!state.currentUser) return; // Don't fetch if not logged in
     const heroBackdrop = document.getElementById('heroBackdrop');
     const heroMovieInfo = document.getElementById('heroMovieInfo');
 
