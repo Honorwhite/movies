@@ -1040,10 +1040,11 @@ async function loadRecommendedMovies() {
         const itemsToShow = finalSorted.slice(0, 24);
 
         if (itemsToShow.length === 0) {
-            if (recommendedState.page < 30) {
+            if (recommendedState.page < 50) {
                 recommendedState.page++;
                 recommendedState.isLoading = false;
-                return setTimeout(loadRecommendedMovies, 100);
+                // Significant delay when no results found to prevent rapid-fire requests
+                return setTimeout(loadRecommendedMovies, 1500);
             }
             recommendedState.hasMore = false;
             loadingIndicator.innerHTML = '<p style="color: var(--text-dim); font-size: 0.8rem; margin-top: 2rem;">Tüm önerileri gördünüz ✨</p>';
@@ -1072,28 +1073,11 @@ async function loadRecommendedMovies() {
         console.error('Error loading recommended items:', error);
     } finally {
         recommendedState.isLoading = false;
-        setTimeout(() => {
-            if (!recommendedState.isLoading && recommendedState.hasMore) {
-                const rect = loadingIndicator.getBoundingClientRect();
-                if (rect.top < window.innerHeight + 600) { // More aggressive check
-                    const searchView = document.getElementById('searchView');
-                    if (searchView && searchView.classList.contains('active')) {
-                        loadRecommendedMovies();
-                    }
-                }
-            }
-        }, 300);
         loadingIndicator.classList.remove('active');
     }
 }
 
 function setupInfiniteScroll() {
-    const observerOptions = {
-        root: null,
-        rootMargin: '200px 0px 800px 0px',
-        threshold: 0
-    };
-
     const triggerLoading = () => {
         if (!recommendedState.isLoading && recommendedState.hasMore) {
             const searchView = document.getElementById('searchView');
@@ -1103,28 +1087,31 @@ function setupInfiniteScroll() {
         }
     };
 
+    // Use IntersectionObserver as the primary trigger (most efficient)
     const observer = new IntersectionObserver((entries) => {
         if (entries[0].isIntersecting) {
             triggerLoading();
         }
-    }, observerOptions);
+    }, { rootMargin: '400px' });
 
     if (loadingIndicator) observer.observe(loadingIndicator);
 
-    // Reliable scroll listener that checks distance from bottom
+    // Optimized scroll listener with throttle to prevent spamming
+    let scrollTimeout;
     window.addEventListener('scroll', () => {
-        const scrollHeight = document.documentElement.scrollHeight;
-        const scrollTop = window.scrollY || document.documentElement.scrollTop;
-        const clientHeight = window.innerHeight;
+        if (scrollTimeout) return;
+        scrollTimeout = setTimeout(() => {
+            const scrollHeight = document.documentElement.scrollHeight;
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const clientHeight = window.innerHeight;
 
-        // Trigger when within 1200px of bottom (increased for wide screens)
-        if ((scrollHeight - scrollTop - clientHeight) < 1200) {
-            triggerLoading();
-        }
+            // Trigger load if within 800px of bottom
+            if ((scrollHeight - scrollTop - clientHeight) < 800) {
+                triggerLoading();
+            }
+            scrollTimeout = null;
+        }, 800);
     }, { passive: true });
-
-    // Initial check to see if we need more content immediately
-    setTimeout(triggerLoading, 1000);
 }
 
 
