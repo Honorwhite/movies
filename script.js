@@ -1475,7 +1475,7 @@ window.ignoreMovie = (movie) => {
 };
 
 // --- Player Functions ---
-let currentPlayerSource = 'vidking';
+let currentPlayerSource = 'vidfast';
 
 window.switchPlayerSource = (source, id, mediaType, season, episode) => {
     currentPlayerSource = source;
@@ -1483,7 +1483,7 @@ window.switchPlayerSource = (source, id, mediaType, season, episode) => {
     // Update active class in UI
     document.querySelectorAll('.source-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = Array.from(document.querySelectorAll('.source-btn')).find(btn =>
-        (source === 'vidking' && btn.textContent === 'Kaynak 1') ||
+        (source === 'vidfast' && btn.textContent === 'Kaynak 1') ||
         (source === 'vidsrc' && btn.textContent === 'Kaynak 2') ||
         (source === 'videasy' && btn.textContent === 'Kaynak 3')
     );
@@ -1493,12 +1493,13 @@ window.switchPlayerSource = (source, id, mediaType, season, episode) => {
     const iframe = document.getElementById('moviePlayer');
 
     let embedUrl = '';
+    const extraParams = '&poster=true&theme=6366f1&nextButton=true&autoNext=true';
     if (mediaType === 'tv') {
-        if (source === 'vidking') embedUrl = `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        if (source === 'vidfast') embedUrl = `https://vidfast.pro/tv/${id}/${season}/${episode}?autoPlay=true${extraParams}`;
         else if (source === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
         else if (source === 'videasy') embedUrl = `https://player.videasy.net/tv/${id}/${season}/${episode}`;
     } else {
-        if (source === 'vidking') embedUrl = `https://www.vidking.net/embed/movie/${id}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        if (source === 'vidfast') embedUrl = `https://vidfast.pro/movie/${id}?autoPlay=true${extraParams}`;
         else if (source === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/movie/${id}`;
         else if (source === 'videasy') embedUrl = `https://player.videasy.net/movie/${id}`;
     }
@@ -1532,12 +1533,13 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
 
     // Set embed URL based on global source
     let embedUrl = '';
+    const extraParams = '&poster=true&theme=6366f1&nextButton=true&autoNext=true';
     if (mediaType === 'tv') {
-        if (currentPlayerSource === 'vidking') embedUrl = `https://www.vidking.net/embed/tv/${id}/${season}/${episode}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        if (currentPlayerSource === 'vidfast') embedUrl = `https://vidfast.pro/tv/${id}/${season}/${episode}?autoPlay=true${extraParams}`;
         else if (currentPlayerSource === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/tv/${id}/${season}/${episode}`;
         else if (currentPlayerSource === 'videasy') embedUrl = `https://player.videasy.net/tv/${id}/${season}/${episode}`;
     } else {
-        if (currentPlayerSource === 'vidking') embedUrl = `https://www.vidking.net/embed/movie/${id}?color=4f46e5%3B&autoPlay=true&nextEpisode=true&episodeSelector=true`;
+        if (currentPlayerSource === 'vidfast') embedUrl = `https://vidfast.pro/movie/${id}?autoPlay=true${extraParams}`;
         else if (currentPlayerSource === 'vidsrc') embedUrl = `https://vidsrc.xyz/embed/movie/${id}`;
         else if (currentPlayerSource === 'videasy') embedUrl = `https://player.videasy.net/movie/${id}`;
     }
@@ -1566,7 +1568,7 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
 
             let sourceSelectorHtml = `
                 <div class="player-source-selector">
-                    <button class="source-btn ${currentPlayerSource === 'vidking' ? 'active' : ''}" onclick="switchPlayerSource('vidking', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 1</button>
+                    <button class="source-btn ${currentPlayerSource === 'vidfast' ? 'active' : ''}" onclick="switchPlayerSource('vidfast', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 1</button>
                     <button class="source-btn ${currentPlayerSource === 'vidsrc' ? 'active' : ''}" onclick="switchPlayerSource('vidsrc', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 2</button>
                     <button class="source-btn ${currentPlayerSource === 'videasy' ? 'active' : ''}" onclick="switchPlayerSource('videasy', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 3</button>
                     <button class="source-btn fullscreen-btn" onclick="toggleFullscreen()" title="Tam Ekran"><i class="fas fa-expand"></i></button>
