@@ -1508,6 +1508,19 @@ window.switchPlayerSource = (source, id, mediaType, season, episode) => {
     }
 };
 
+window.toggleFullscreen = () => {
+    const iframe = document.getElementById('moviePlayer');
+    if (!iframe) return;
+
+    if (iframe.requestFullscreen) {
+        iframe.requestFullscreen();
+    } else if (iframe.webkitRequestFullscreen) {
+        iframe.webkitRequestFullscreen();
+    } else if (iframe.msRequestFullscreen) {
+        iframe.msRequestFullscreen();
+    }
+};
+
 window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => {
     const modal = document.getElementById('playerModal');
     const iframe = document.getElementById('moviePlayer');
@@ -1556,6 +1569,7 @@ window.openPlayer = async (id, mediaType = 'movie', season = 1, episode = 1) => 
                     <button class="source-btn ${currentPlayerSource === 'vidking' ? 'active' : ''}" onclick="switchPlayerSource('vidking', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 1</button>
                     <button class="source-btn ${currentPlayerSource === 'vidsrc' ? 'active' : ''}" onclick="switchPlayerSource('vidsrc', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 2</button>
                     <button class="source-btn ${currentPlayerSource === 'videasy' ? 'active' : ''}" onclick="switchPlayerSource('videasy', ${id}, '${mediaType}', ${season}, ${episode})">Kaynak 3</button>
+                    <button class="source-btn fullscreen-btn" onclick="toggleFullscreen()" title="Tam Ekran"><i class="fas fa-expand"></i></button>
                 </div>
             `;
 
