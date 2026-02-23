@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cinetrack-v2';
+const CACHE_NAME = 'cinetrack-v3';
 const ASSETS = [
     './',
     './index.html',
