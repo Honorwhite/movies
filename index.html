@@ -236,30 +236,51 @@
                         style="color: #ef4444;"></i></div>
             </div>
         </section>
-    </main>
 
-    <!-- Player Modal -->
-    <div id="playerModal" class="modal">
-        <div class="modal-content">
-            <button class="close-modal" onclick="app.closePlayer()"><i class="fas fa-times"></i></button>
-            <div class="player-controls">
-                <select id="sourceSelect" class="player-select" onchange="app.updatePlayerSrc()">
-                    <option value="vidsrc" selected>Source 1 (VidSrc.xyz)</option>
-                    <option value="vidfast">Source 2 (VidFast)</option>
-                    <option value="videasy">Source 3 (VidEasy)</option>
-                </select>
-                <div id="tvSelectors" style="display: none; gap: 0.5rem;">
-                    <select id="seasonSelect" class="player-select" onchange="app.handleSeasonChange()">
-                        <!-- Populated by JS -->
-                    </select>
-                    <select id="episodeSelect" class="player-select" onchange="app.updatePlayerSrc()">
-                        <!-- Populated by JS -->
-                    </select>
+        <!-- Watch View (New Professional Page) -->
+        <section id="watchView" class="view">
+            <div class="watch-header">
+                <button class="back-btn" onclick="app.goBack()">
+                    <i class="fas fa-arrow-left"></i> <span data-i18n="back">Geri Dön</span>
+                </button>
+                <div class="watch-title-area">
+                    <h2 id="watchMovieTitle">Film Adı</h2>
+                    <div id="watchMovieMeta" class="watch-meta"></div>
                 </div>
             </div>
-            <iframe id="moviePlayer" src="" allowfullscreen></iframe>
-        </div>
-    </div>
+
+            <div class="watch-container">
+                <div class="video-wrapper">
+                    <iframe id="moviePlayer" src="" allowfullscreen></iframe>
+                </div>
+
+                <div class="player-controls-new">
+                    <div class="control-group">
+                        <label><i class="fas fa-server"></i> Kaynak</label>
+                        <div class="source-chips" id="sourceChips">
+                            <button class="source-chip active"
+                                onclick="app.updateSource('vidsrc', this)">VidSrc</button>
+                            <button class="source-chip" onclick="app.updateSource('vidfast', this)">VidFast</button>
+                            <button class="source-chip" onclick="app.updateSource('videasy', this)">VidEasy</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tvSelectorArea" class="tv-selector-area" style="display: none;">
+                    <div class="selector-header">
+                        <h3><i class="fas fa-list"></i> Bölümler</h3>
+                        <select id="seasonSelect" class="season-dropdown" onchange="app.handleSeasonChange()">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                    <div id="episodeGrid" class="episode-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
 
     <script src="script.js"></script>
 </body>

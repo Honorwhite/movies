@@ -715,115 +715,357 @@ body {
     font-weight: 800;
 }
 
-/* Player Modal */
-.modal {
-    position: fixed;
-    inset: 0;
-    z-index: 3000;
-    background: rgba(0, 0, 0, 0.9);
+/* Watch View Layout */
+.watch-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    opacity: 0;
-    visibility: hidden;
+    gap: 2rem;
+    margin-bottom: 2rem;
+    animation: fadeIn 0.8s ease;
+}
+
+.back-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    padding: 0.8rem 1.5rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-weight: 600;
     transition: var(--transition);
 }
 
-.modal.active {
-    opacity: 1;
-    visibility: visible;
+.back-btn:hover {
+    background: var(--primary);
+    border-color: var(--primary);
+    transform: translateX(-5px);
 }
 
-.modal-content {
-    width: 100%;
-    max-width: 1200px;
-    height: 80vh;
-    background: var(--bg-darker);
+.watch-title-area h2 {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 0.2rem;
+}
+
+.watch-meta {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.watch-container {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 1.5rem;
+    align-items: start;
+    min-height: 70vh;
+}
+
+
+.video-wrapper {
+    grid-column: 1;
+    grid-row: 1 / span 2;
     position: relative;
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: black;
     border-radius: var(--radius-lg);
     overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
     border: 1px solid var(--glass-border);
 }
 
-.close-modal {
+
+
+.video-wrapper iframe {
     position: absolute;
-    top: 1.5rem;
-    right: 1.5rem;
-    background: rgba(0, 0, 0, 0.5);
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     border: none;
-    color: white;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    z-index: 10;
+}
+
+/* Sidebar removal handled */
+
+.player-controls-new {
+    grid-column: 2;
+    grid-row: 1;
+    background: var(--bg-card);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-border);
     display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.control-group label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+}
+
+.source-chips {
+    display: flex;
+    gap: 0.8rem;
+}
+
+.source-chip {
+    background: var(--bg-dark);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    padding: 0.6rem 1.2rem;
+    border-radius: 100px;
+    cursor: pointer;
+    font-weight: 600;
     transition: var(--transition);
 }
 
-.close-modal:hover {
-    background: #ef4444;
+.source-chip:hover {
+    border-color: var(--primary);
+    color: white;
 }
 
-.player-controls {
+.source-chip.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px var(--primary-glow);
+}
+
+/* Sidebar Components Removed */
+
+
+
+.sidebar-backdrop {
+    width: 100%;
+    height: 180px;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}
+
+.sidebar-backdrop::after {
+    content: '';
     position: absolute;
-    top: 1.5rem;
-    left: 1.5rem;
-    display: flex;
-    gap: 0.8rem;
-    z-index: 11;
-    max-width: calc(100% - 100px);
+    inset: 0;
+    background: linear-gradient(to top, var(--bg-darker), transparent);
 }
 
-.player-select {
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(10px);
+.details-content {
+    padding: 1.5rem;
+    margin-top: -40px;
+    position: relative;
+    z-index: 2;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+
+.rating-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fbbf24;
+    color: #000;
+    padding: 0.4rem 0.8rem;
+    border-radius: 100px;
+    font-weight: 800;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.watch-overview {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+
+.genre-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.genre-tag {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+/* TV Selector */
+.tv-selector-area {
+    grid-column: 2;
+    grid-row: 2;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-border);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+
+
+
+
+.selector-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.2rem;
+}
+
+.selector-header h3 {
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.season-dropdown {
+    background: var(--bg-dark);
     border: 1px solid var(--glass-border);
     color: white;
     padding: 0.5rem 1rem;
     border-radius: var(--radius-sm);
     outline: none;
-    cursor: pointer;
-    font-size: 0.85rem;
     font-weight: 600;
 }
 
-.player-select:hover {
+.episode-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 0.8rem;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.ep-btn {
+    aspect-ratio: 1;
+    background: var(--bg-dark);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.ep-btn:hover {
     border-color: var(--primary);
-}
-
-.player-select option {
-    background: var(--bg-darker);
     color: white;
+    background: var(--bg-card-hover);
 }
 
+.ep-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px var(--primary-glow);
+}
+
+@media (max-width: 1200px) {
+    .watch-container {
+        grid-template-columns: 1fr;
+    }
+
+    .video-wrapper,
+    .player-controls-new,
+    .tv-selector-area {
+        grid-column: 1;
+        grid-row: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .watch-container {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    /* Mobilde sıra: Kaynak -> Video -> Bölümler */
+    .player-controls-new {
+        order: 1;
+        width: 100%;
+    }
+
+    .video-wrapper {
+        order: 2;
+        width: 100%;
+    }
+
+    .tv-selector-area {
+        order: 3;
+        width: 100%;
+    }
+}
+
+
+
+@media (max-width: 768px) {
+    .watch-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .watch-title-area h2 {
+        font-size: 1.5rem;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Rest of the original styles */
+
+/* Base iframe reset */
 iframe {
     width: 100%;
     height: 100%;
     border: none;
-    padding-top: 4.5rem;
-    /* Space for controls */
 }
 
-@media (max-width: 768px) {
-    .player-controls {
-        top: 0.8rem;
-        left: 0.8rem;
-        flex-wrap: wrap;
-    }
 
-    .player-select {
-        padding: 0.4rem 0.6rem;
-        font-size: 0.75rem;
-    }
+/* Old player styles removed */
 
-    iframe {
-        padding-top: 6rem;
-    }
-}
 
 /* Profile Enhancements */
 .profile-container {

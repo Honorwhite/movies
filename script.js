@@ -26,7 +26,10 @@ const TRANSLATIONS = {
         changePasswordDesc: 'Hesap güvenliğini güncelle',
         logout: 'Oturumu Kapat',
         logoutDesc: 'Bu cihazdaki oturumu sonlandır',
-        premiumMember: 'Premium Üye'
+        premiumMember: 'Premium Üye',
+        back: 'Geri Dön',
+        episodes: 'Bölümler',
+        seasons: 'Sezonlar'
     },
     en: {
         explore: 'Explore',
@@ -55,7 +58,10 @@ const TRANSLATIONS = {
         changePasswordDesc: 'Update account security',
         logout: 'Log Out',
         logoutDesc: 'End session on this device',
-        premiumMember: 'Premium Member'
+        premiumMember: 'Premium Member',
+        back: 'Back',
+        episodes: 'Episodes',
+        seasons: 'Seasons'
     }
 };
 
@@ -80,6 +86,7 @@ class CineTrack {
             isSearching: false,
             isLoading: false,
             currentView: 'search',
+            previousView: 'search',
             settings: {
                 compactMode: localStorage.getItem('ct_compact_mode') === 'true',
                 language: localStorage.getItem('ct_lang') || 'tr'
@@ -593,6 +600,13 @@ class CineTrack {
     switchView(viewId) {
         if (this.state.currentView === viewId && document.getElementById(viewId + 'View').classList.contains('active')) return;
 
+        // Cleanup player if leaving watch view
+        if (this.state.currentView === 'watch' && viewId !== 'watch') {
+            const iframe = document.getElementById('moviePlayer');
+            if (iframe) iframe.src = '';
+        }
+
+        this.state.previousView = this.state.currentView;
         this.state.currentView = viewId;
 
         // Update Nav
@@ -616,23 +630,76 @@ class CineTrack {
         if (viewId === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
     }
 
-    // --- Video Player ---
+    goBack() {
+        this.switchView(this.state.previousView || 'search');
+    }
+
+    // --- Professional Video Player ---
     async playMovie(id, type = 'movie') {
-        const modal = document.getElementById('playerModal');
-        const tvSelectors = document.getElementById('tvSelectors');
+        this.state.player = {
+            id,
+            type,
+            season: 1,
+            episode: 1,
+            source: localStorage.getItem('ct_default_source') || 'vidsrc'
+        };
 
-        this.state.player = { id, type, season: 1, episode: 1 };
+        // Switch to watch view immediately
+        this.switchView('watch');
 
-        if (type === 'tv') {
-            tvSelectors.style.display = 'flex';
-            await this.fetchTvMeta(id);
-        } else {
-            tvSelectors.style.display = 'none';
+        // Show loading state in player
+        const iframe = document.getElementById('moviePlayer');
+        iframe.src = '';
+
+        try {
+            // Fetch detailed info
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+            const data = await res.json();
+
+            // Populate Sidebar & Info
+            const titleEl = document.getElementById('watchMovieTitle');
+            if (titleEl) titleEl.textContent = data.title || data.name;
+
+            const ratingEl = document.getElementById('watchRating');
+            if (ratingEl) ratingEl.textContent = data.vote_average.toFixed(1);
+
+            const overviewEl = document.getElementById('watchOverview');
+            if (overviewEl) overviewEl.textContent = data.overview;
+
+            const backdropEl = document.getElementById('watchBackdrop');
+            if (backdropEl) backdropEl.style.backgroundImage = `url(${CONFIG.HERO_IMG}${data.backdrop_path})`;
+
+            const metaHtml = `
+                <span><i class="fas fa-calendar"></i> ${(data.release_date || data.first_air_date || '').split('-')[0]}</span>
+                <span><i class="fas fa-clock"></i> ${data.runtime ? data.runtime + ' min' : (data.episode_run_time ? data.episode_run_time[0] + ' min' : '')}</span>
+            `;
+            const metaEl = document.getElementById('watchMovieMeta');
+            if (metaEl) metaEl.innerHTML = metaHtml;
+
+            const genresEl = document.getElementById('watchGenres');
+            if (genresEl) {
+                const genresHtml = data.genres.map(g => `<span class="genre-tag">${g.name}</span>`).join('');
+                genresEl.innerHTML = genresHtml;
+            }
+
+            // Handle TV specific parts
+            const tvArea = document.getElementById('tvSelectorArea');
+            if (type === 'tv') {
+                tvArea.style.display = 'block';
+                await this.fetchTvMeta(id);
+            } else {
+                tvArea.style.display = 'none';
+            }
+
+            // Set source chip active
+            document.querySelectorAll('.source-chip').forEach(chip => {
+                chip.classList.toggle('active', chip.getAttribute('onclick').includes(this.state.player.source));
+            });
+
+            this.updatePlayerSrc();
+        } catch (e) {
+            console.error('Play error:', e);
         }
-
-        this.updatePlayerSrc();
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
     }
 
     async fetchTvMeta(id) {
@@ -654,38 +721,46 @@ class CineTrack {
 
     async handleSeasonChange() {
         const season = document.getElementById('seasonSelect').value;
-        const episodeSelect = document.getElementById('episodeSelect');
+        const episodeGrid = document.getElementById('episodeGrid');
         this.state.player.season = season;
 
         try {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${this.state.player.id}/season/${season}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
             const data = await res.json();
 
-            episodeSelect.innerHTML = data.episodes
-                .map(e => `<option value="${e.episode_number}">${this.state.settings.language === 'tr' ? 'Bölüm' : 'Episode'} ${e.episode_number}</option>`)
+            episodeGrid.innerHTML = data.episodes
+                .map(e => `<button class="ep-btn ${this.state.player.episode == e.episode_number ? 'active' : ''}" onclick="app.playEpisode(${e.episode_number}, this)">${e.episode_number}</button>`)
                 .join('');
 
-            this.state.player.episode = 1;
-            this.updatePlayerSrc();
+            // If we just swapped seasons, reset to ep 1 unless it's the first load
+            // For now, let's just keep the current selection or default to 1
         } catch (e) {
             console.error('Season change error:', e);
         }
     }
 
+    playEpisode(ep, btn) {
+        this.state.player.episode = ep;
+        document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.updatePlayerSrc();
+    }
+
+    updateSource(source, btn) {
+        this.state.player.source = source;
+        document.querySelectorAll('.source-chip').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        localStorage.setItem('ct_default_source', source);
+        this.updatePlayerSrc();
+    }
+
     updatePlayerSrc() {
         const iframe = document.getElementById('moviePlayer');
-        const source = document.getElementById('sourceSelect').value;
-        const { id, type, season, episode } = this.state.player;
-
-        // Update local state if it's TV
-        if (type === 'tv') {
-            this.state.player.season = document.getElementById('seasonSelect').value;
-            this.state.player.episode = document.getElementById('episodeSelect').value;
-        }
+        const { id, type, season, episode, source } = this.state.player;
 
         let embedUrl = '';
-        const s = this.state.player.season;
-        const e = this.state.player.episode;
+        const s = season;
+        const e = episode;
 
         if (source === 'vidfast') {
             embedUrl = type === 'movie'
@@ -702,14 +777,6 @@ class CineTrack {
         }
 
         iframe.src = embedUrl;
-    }
-
-    closePlayer() {
-        const modal = document.getElementById('playerModal');
-        const iframe = document.getElementById('moviePlayer');
-        iframe.src = '';
-        modal.classList.remove('active');
-        document.body.style.overflow = 'auto';
     }
 
     // --- Utilities ---
