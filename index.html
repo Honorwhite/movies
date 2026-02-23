@@ -45,16 +45,16 @@
         </div>
         <div class="nav-links">
             <button class="nav-btn active" onclick="app.switchView('search')" data-view="search">
-                <i class="fas fa-compass"></i> Keşfet
+                <i class="fas fa-compass"></i> <span data-i18n="explore">Keşfet</span>
             </button>
             <button class="nav-btn" onclick="app.switchView('watched')" data-view="watched">
-                <i class="fas fa-check-circle"></i> İzlediklerim
+                <i class="fas fa-check-circle"></i> <span data-i18n="watched">İzlediklerim</span>
             </button>
             <button class="nav-btn" onclick="app.switchView('watchlist')" data-view="watchlist">
-                <i class="fas fa-bookmark"></i> İzlenecekler
+                <i class="fas fa-bookmark"></i> <span data-i18n="watchlist">İzlenecekler</span>
             </button>
             <button class="nav-btn" onclick="app.switchView('profile')" data-view="profile">
-                <i class="fas fa-user-circle"></i> Profil
+                <i class="fas fa-user-circle"></i> <span data-i18n="profile">Profil</span>
             </button>
         </div>
     </nav>
@@ -65,12 +65,13 @@
             <div class="search-container">
                 <div class="search-wrapper">
                     <i class="fas fa-search search-icon"></i>
-                    <input type="text" id="movieSearch" class="search-input" placeholder="Film veya dizi arayın...">
+                    <input type="text" id="movieSearch" class="search-input" placeholder="Film veya dizi arayın..."
+                        data-i18n-placeholder="searchPlaceholder">
                 </div>
             </div>
 
             <div class="section-header">
-                <h3 class="section-title" id="gridTitle">Önerilenler</h3>
+                <h3 class="section-title" id="gridTitle" data-i18n="suggested">Önerilenler</h3>
                 <div id="genreChips" class="genre-chips">
                     <!-- Genre chips if needed -->
                 </div>
@@ -86,25 +87,26 @@
         <!-- Watched View -->
         <section id="watchedView" class="view">
             <div class="section-header">
-                <h2 class="section-title">İzlediğim Filmler</h2>
+                <h2 class="section-title" data-i18n="watchedTitle">İzlediğim Filmler</h2>
                 <div class="header-actions">
                     <div class="sort-controls">
                         <button class="sort-btn" onclick="app.sortList('watched', 'title', 'watchedList')"
                             title="A-Z Sırala">
-                            <i class="fas fa-sort-alpha-down"></i> Ad
+                            <i class="fas fa-sort-alpha-down"></i> <span data-i18n="sortName">Ad</span>
                         </button>
                         <button class="sort-btn" onclick="app.sortList('watched', 'vote_average', 'watchedList')"
                             title="Puana Göre">
-                            <i class="fas fa-star"></i> Puan
+                            <i class="fas fa-star"></i> <span data-i18n="sortScore">Puan</span>
                         </button>
                         <button class="sort-btn" onclick="app.sortList('watched', 'release_date', 'watchedList')"
                             title="Tarihe Göre">
-                            <i class="fas fa-calendar-alt"></i> Tarih
+                            <i class="fas fa-calendar-alt"></i> <span data-i18n="sortDate">Tarih</span>
                         </button>
                     </div>
                     <div class="search-wrapper list-search">
                         <i class="fas fa-search search-icon"></i>
-                        <input type="text" id="watchedSearch" class="search-input" placeholder="Listende ara...">
+                        <input type="text" id="watchedSearch" class="search-input" placeholder="Listende ara..."
+                            data-i18n-placeholder="listSearchPlaceholder">
                     </div>
                 </div>
             </div>
@@ -115,25 +117,26 @@
         <!-- Watchlist View -->
         <section id="watchlistView" class="view">
             <div class="section-header">
-                <h2 class="section-title">İzlenecekler Listesi</h2>
+                <h2 class="section-title" data-i18n="watchlistTitle">İzlenecekler Listesi</h2>
                 <div class="header-actions">
                     <div class="sort-controls">
                         <button class="sort-btn" onclick="app.sortList('watchlist', 'title', 'watchlist')"
                             title="A-Z Sırala">
-                            <i class="fas fa-sort-alpha-down"></i> Ad
+                            <i class="fas fa-sort-alpha-down"></i> <span data-i18n="sortName">Ad</span>
                         </button>
                         <button class="sort-btn" onclick="app.sortList('watchlist', 'vote_average', 'watchlist')"
                             title="Puana Göre">
-                            <i class="fas fa-star"></i> Puan
+                            <i class="fas fa-star"></i> <span data-i18n="sortScore">Puan</span>
                         </button>
                         <button class="sort-btn" onclick="app.sortList('watchlist', 'release_date', 'watchlist')"
                             title="Tarihe Göre">
-                            <i class="fas fa-calendar-alt"></i> Tarih
+                            <i class="fas fa-calendar-alt"></i> <span data-i18n="sortDate">Tarih</span>
                         </button>
                     </div>
                     <div class="search-wrapper list-search">
                         <i class="fas fa-search search-icon"></i>
-                        <input type="text" id="watchlistSearch" class="search-input" placeholder="Listende ara...">
+                        <input type="text" id="watchlistSearch" class="search-input" placeholder="Listende ara..."
+                            data-i18n-placeholder="listSearchPlaceholder">
                     </div>
                 </div>
             </div>
@@ -144,15 +147,93 @@
         <!-- Profile View -->
         <section id="profileView" class="view">
             <div class="section-header">
-                <h2 class="section-title">Profil Ayarları</h2>
+                <h2 class="section-title" data-i18n="profileTitle">Profil ve Ayarlar</h2>
             </div>
-            <div class="auth-card" style="max-width: 600px; margin: 0 auto; text-align: left;">
-                <h3 id="profileName" style="margin-bottom: 2rem; font-size: 2rem;">Kullanıcı Adı</h3>
-                <div class="settings-group">
-                    <button class="btn-primary" onclick="app.logout()" style="background: #ef4444;">
-                        <i class="fas fa-sign-out-alt"></i> Oturumu Kapat
-                    </button>
+
+            <div class="profile-container">
+                <!-- User Card -->
+                <div class="profile-header-card">
+                    <div class="p-avatar"><i class="fas fa-user-circle"></i></div>
+                    <div class="p-info">
+                        <h3 id="profileName">Kullanıcı Adı</h3>
+                        <span class="p-status" data-i18n="premiumMember">Premium Üye</span>
+                    </div>
                 </div>
+
+                <!-- App Settings -->
+                <h4 class="settings-section-title" data-i18n="appOptions">Uygulama Seçenekleri</h4>
+                <div class="settings-list">
+                    <div class="settings-item">
+                        <div class="s-text">
+                            <i class="fas fa-magic"></i>
+                            <div>
+                                <span data-i18n="compactMode">Kompakt Görünüm</span>
+                                <small data-i18n="compactDesc">Grid yapısını daha sıkı hale getirir</small>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="compactToggle" onchange="app.toggleCompactMode(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-item">
+                        <div class="s-text">
+                            <i class="fas fa-play-circle"></i>
+                            <div>
+                                <span data-i18n="autoPlay">Otomatik Oynat</span>
+                                <small data-i18n="autoPlayDesc">Fragmanları otomatik başlat</small>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-item" onclick="app.toggleLanguage()">
+                        <div class="s-text">
+                            <i class="fas fa-language"></i>
+                            <div>
+                                <span data-i18n="uiLanguage">Arayüz Dili</span>
+                                <small data-i18n="uiLanguageDesc">Uygulama dilini değiştir</small>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span id="currentLangLabel"
+                                style="font-weight: 700; color: var(--primary); font-size: 0.8rem;">TR</span>
+                            <i class="fas fa-chevron-right s-arrow"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System & Data -->
+                <h4 class="settings-section-title" data-i18n="accountData">Hesap ve Veri</h4>
+                <div class="settings-list">
+                    <div class="settings-item" onclick="app.changePassword()">
+                        <div class="s-text">
+                            <i class="fas fa-key"></i>
+                            <div>
+                                <span data-i18n="changePassword">Şifre Değiştir</span>
+                                <small data-i18n="changePasswordDesc">Hesap güvenliğini güncelle</small>
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right s-arrow"></i>
+                    </div>
+
+                    <div class="settings-item" onclick="app.logout()">
+                        <div class="s-text">
+                            <i class="fas fa-sign-out-alt" style="color: #ef4444;"></i>
+                            <div>
+                                <span style="color: #ef4444;" data-i18n="logout">Oturumu Kapat</span>
+                                <small data-i18n="logoutDesc">Bu cihazdaki oturumu sonlandır</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="app-version">CineTrack v2.4.0 • Made with <i class="fas fa-heart"
+                        style="color: #ef4444;"></i></div>
             </div>
         </section>
     </main>
