@@ -231,21 +231,29 @@
                         </div>
                     </div>
                 </div>
-
-                <div class="app-version">CineTrack v2.4.0 • Made with <i class="fas fa-heart"
-                        style="color: #ef4444;"></i></div>
             </div>
         </section>
 
         <!-- Watch View (New Professional Page) -->
         <section id="watchView" class="view">
             <div class="watch-header">
-                <button class="back-btn" onclick="app.goBack()">
-                    <i class="fas fa-arrow-left"></i> <span data-i18n="back">Geri Dön</span>
-                </button>
-                <div class="watch-title-area">
-                    <h2 id="watchMovieTitle">Film Adı</h2>
-                    <div id="watchMovieMeta" class="watch-meta"></div>
+                <div class="watch-header-left">
+                    <button class="back-btn" onclick="app.goBack()">
+                        <i class="fas fa-arrow-left"></i> <span data-i18n="back">Geri Dön</span>
+                    </button>
+                    <div class="watch-title-area">
+                        <h2 id="watchMovieTitle">Film Adı</h2>
+                        <div id="watchMovieMeta" class="watch-meta"></div>
+                    </div>
+                </div>
+                <div class="watch-actions">
+                    <button id="watchToggleWatched" class="action-btn-main" onclick="app.handleWatchAction('watched')">
+                        <i class="fas fa-check-circle"></i> <span data-i18n="watched">İzledim</span>
+                    </button>
+                    <button id="watchToggleWatchlist" class="action-btn-main"
+                        onclick="app.handleWatchAction('watchlist')">
+                        <i class="fas fa-bookmark"></i> <span data-i18n="watchlist">Sırada</span>
+                    </button>
                 </div>
             </div>
 

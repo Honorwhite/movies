@@ -455,6 +455,9 @@ body {
     overflow: hidden;
 }
 
+/* Card Actions Footer */
+
+
 .movie-card:hover {
     transform: translateY(-8px);
     border-color: var(--primary);
@@ -719,10 +722,49 @@ body {
 .watch-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 2rem;
     margin-bottom: 2rem;
     animation: fadeIn 0.8s ease;
 }
+
+.watch-header-left {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.watch-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.action-btn-main {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    padding: 0.8rem 1.5rem;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    transition: var(--transition);
+}
+
+.action-btn-main:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--primary);
+}
+
+.action-btn-main.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px var(--primary-glow);
+}
+
 
 .back-btn {
     background: var(--bg-card);
@@ -1033,14 +1075,31 @@ body {
 @media (max-width: 768px) {
     .watch-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
+        gap: 1.5rem;
+    }
+
+    .watch-header-left {
+        flex-direction: column;
+        align-items: start;
         gap: 1rem;
     }
 
-    .watch-title-area h2 {
-        font-size: 1.5rem;
+    .watch-actions {
+        width: 100%;
     }
+
+    .action-btn-main {
+        flex: 1;
+        justify-content: center;
+        padding: 0.8rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    /* Responsive handled previously */
+
 }
+
 
 @keyframes fadeIn {
     from {

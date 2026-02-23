@@ -100,7 +100,8 @@ class CineTrack {
             sortStates: {
                 watched: { field: '', direction: 'desc' },
                 watchlist: { field: '', direction: 'desc' }
-            }
+            },
+            scrollPositions: {}
         };
 
         this.init();
@@ -444,6 +445,11 @@ class CineTrack {
         this.renderGrid(this.state.trending, 'searchResults', true); // Refresh current view
         if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList');
         if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
+
+        if (this.state.currentView === 'watch' && this.state.player.id === id) {
+            this.updateWatchActionsUI();
+        }
+
         this.renderStats();
     }
 
@@ -597,13 +603,21 @@ class CineTrack {
     }
 
     // --- View Management ---
-    switchView(viewId) {
-        if (this.state.currentView === viewId && document.getElementById(viewId + 'View').classList.contains('active')) return;
+    switchView(viewId, pushState = true, metadata = {}) {
+        const isSameView = this.state.currentView === viewId && document.getElementById(viewId + 'View').classList.contains('active');
+
+        // If it's the same view and no content change to track, return
+        if (isSameView && !metadata.movieId) return;
 
         // Cleanup player if leaving watch view
         if (this.state.currentView === 'watch' && viewId !== 'watch') {
             const iframe = document.getElementById('moviePlayer');
             if (iframe) iframe.src = '';
+        }
+
+        // Save scroll position for the current view before switching
+        if (this.state.currentView) {
+            this.state.scrollPositions[this.state.currentView] = window.scrollY;
         }
 
         this.state.previousView = this.state.currentView;
@@ -618,12 +632,25 @@ class CineTrack {
         document.querySelectorAll('.view').forEach(view => {
             const isActive = view.id === viewId + 'View';
             view.classList.toggle('active', isActive);
-
-            // Reset scroll for the section if needed
-            if (isActive) {
-                window.scrollTo({ top: 0, behavior: 'auto' });
-            }
         });
+
+        // Restore scroll position
+        if (!pushState && this.state.scrollPositions[viewId] !== undefined) {
+            // Small timeout to ensure grid has rendered if it was cleared
+            setTimeout(() => {
+                window.scrollTo({ top: this.state.scrollPositions[viewId], behavior: 'auto' });
+            }, 50);
+        } else {
+            window.scrollTo({ top: 0, behavior: 'auto' });
+        }
+
+
+        // Push state to history
+        if (pushState) {
+            const hash = metadata.movieId ? `#watch/${metadata.movieId}` : `#${viewId}`;
+            history.pushState({ view: viewId, ...metadata }, '', hash);
+        }
+
 
         // Specific View Logic
         if (viewId === 'watched') this.renderGrid(this.state.watched, 'watchedList');
@@ -635,7 +662,7 @@ class CineTrack {
     }
 
     // --- Professional Video Player ---
-    async playMovie(id, type = 'movie') {
+    async playMovie(id, type = 'movie', pushState = true) {
         this.state.player = {
             id,
             type,
@@ -644,12 +671,12 @@ class CineTrack {
             source: localStorage.getItem('ct_default_source') || 'vidsrc'
         };
 
-        // Switch to watch view immediately
-        this.switchView('watch');
+        // Switch to watch view
+        this.switchView('watch', pushState, { movieId: id, mediaType: type });
 
         // Show loading state in player
         const iframe = document.getElementById('moviePlayer');
-        iframe.src = '';
+        if (iframe) iframe.src = '';
 
         try {
             // Fetch detailed info
@@ -693,12 +720,45 @@ class CineTrack {
 
             // Set source chip active
             document.querySelectorAll('.source-chip').forEach(chip => {
-                chip.classList.toggle('active', chip.getAttribute('onclick').includes(this.state.player.source));
+                const sourceAttr = chip.getAttribute('onclick');
+                if (sourceAttr) {
+                    chip.classList.toggle('active', sourceAttr.includes(`'${this.state.player.source}'`));
+                }
             });
 
+            this.updateWatchActionsUI();
             this.updatePlayerSrc();
         } catch (e) {
             console.error('Play error:', e);
+        }
+    }
+
+    handleWatchAction(type) {
+        const { id, type: mediaType } = this.state.player;
+        this.toggleList(type, id, mediaType);
+    }
+
+    updateWatchActionsUI() {
+        const id = this.state.player.id;
+        const lang = this.state.settings.language;
+
+        const watchedBtn = document.getElementById('watchToggleWatched');
+        const watchlistBtn = document.getElementById('watchToggleWatchlist');
+
+        if (watchedBtn) {
+            const isAdded = this.isInList('watched', id);
+            watchedBtn.classList.toggle('active', isAdded);
+            watchedBtn.querySelector('span').textContent = isAdded
+                ? (lang === 'tr' ? 'İzledim ✓' : 'Watched ✓')
+                : (lang === 'tr' ? 'İzledim' : 'Watched');
+        }
+
+        if (watchlistBtn) {
+            const isAdded = this.isInList('watchlist', id);
+            watchlistBtn.classList.toggle('active', isAdded);
+            watchlistBtn.querySelector('span').textContent = isAdded
+                ? (lang === 'tr' ? 'Sırada ✓' : 'Watchlist ✓')
+                : (lang === 'tr' ? 'Sırada' : 'Watchlist');
         }
     }
 
@@ -776,7 +836,11 @@ class CineTrack {
                 : `https://player.videasy.net/tv/${id}/${s}/${e}`;
         }
 
-        iframe.src = embedUrl;
+        if (iframe.contentWindow) {
+            iframe.contentWindow.location.replace(embedUrl);
+        } else {
+            iframe.src = embedUrl;
+        }
     }
 
     // --- Utilities ---
@@ -800,7 +864,23 @@ class CineTrack {
         watchlistSearch?.addEventListener('input', (e) => {
             this.filterList('watchlist', 'watchlist', e.target.value);
         });
+
+        window.addEventListener('popstate', (e) => {
+            if (e.state && e.state.view) {
+                if (e.state.view === 'watch' && e.state.movieId) {
+                    this.playMovie(e.state.movieId, e.state.mediaType || 'movie', false);
+                } else {
+                    this.switchView(e.state.view, false);
+                }
+            } else {
+                this.switchView('search', false);
+            }
+        });
+
+        // Set initial state
+        history.replaceState({ view: this.state.currentView }, '', `#${this.state.currentView}`);
     }
+
 
     filterList(listKey, containerId, query) {
         const list = this.state[listKey];
