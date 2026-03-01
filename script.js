@@ -507,6 +507,18 @@ class CineTrack {
             this.updateWatchActionsUI();
         }
 
+        // If collection grid exists and we are in watch view, update buttons in it
+        const colGrid = document.getElementById('collectionGrid');
+        if (colGrid && this.state.currentView === 'watch') {
+            const card = colGrid.querySelector(`.col-movie-card[onclick*="(${id},"]`);
+            if (card) {
+                const watchedBtn = card.querySelector(`.col-action-btn[onclick*="'watched'"]`);
+                const watchlistBtn = card.querySelector(`.col-action-btn[onclick*="'watchlist'"]`);
+                if (watchedBtn) watchedBtn.classList.toggle('active', this.isInList('watched', id));
+                if (watchlistBtn) watchlistBtn.classList.toggle('active', this.isInList('watchlist', id));
+            }
+        }
+
         this.renderStats();
     }
 
@@ -775,6 +787,14 @@ class CineTrack {
                 tvArea.style.display = 'none';
             }
 
+            // Handle Collection/Franchise
+            const collectionArea = document.getElementById('collectionArea');
+            if (type === 'movie' && data.belongs_to_collection) {
+                await this.fetchCollection(data.belongs_to_collection.id);
+            } else {
+                collectionArea.style.display = 'none';
+            }
+
             // Set source chip active
             document.querySelectorAll('.source-chip').forEach(chip => {
                 const sourceAttr = chip.getAttribute('onclick');
@@ -788,6 +808,68 @@ class CineTrack {
         } catch (e) {
             console.error('Play error:', e);
         }
+    }
+
+    async fetchCollection(collectionId) {
+        const collectionArea = document.getElementById('collectionArea');
+        const collectionGrid = document.getElementById('collectionGrid');
+        const collectionTitle = document.getElementById('collectionTitle');
+
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/collection/${collectionId}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+            const data = await res.json();
+
+            if (!data.parts || data.parts.length === 0) {
+                collectionArea.style.display = 'none';
+                return;
+            }
+
+            collectionArea.style.display = 'block';
+            collectionTitle.innerHTML = `<i class="fas fa-layer-group"></i> ${data.name}`;
+
+            // Sort by release date
+            data.parts.sort((a, b) => new Date(a.release_date || 0) - new Date(b.release_date || 0));
+
+            this.renderCollectionGrid(data.parts);
+        } catch (e) {
+            console.error('Collection fetch error:', e);
+            collectionArea.style.display = 'none';
+        }
+    }
+
+    renderCollectionGrid(movies) {
+        const grid = document.getElementById('collectionGrid');
+        if (!grid) return;
+
+        const lang = this.state.settings.language;
+        const tr_watched = lang === 'tr' ? 'İzledim' : 'Watched';
+        const tr_watchlist = lang === 'tr' ? 'Sırada' : 'Watchlist';
+
+        grid.innerHTML = movies.map(movie => {
+            const isWatched = this.isInList('watched', movie.id);
+            const isWatchlist = this.isInList('watchlist', movie.id);
+            const isCurrent = movie.id === this.state.player.id;
+
+            return `
+                <div class="col-movie-card ${isCurrent ? 'current' : ''}" onclick="app.playMovie(${movie.id}, 'movie')">
+                    <img src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.title}" loading="lazy">
+                    <div class="col-movie-info">
+                        <div class="col-movie-title">${movie.title}</div>
+                        <div class="col-movie-year">${(movie.release_date || '').split('-')[0]}</div>
+                        <div class="col-movie-actions">
+                            <button class="col-action-btn ${isWatched ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleList('watched', ${movie.id}, 'movie')" title="${tr_watched}">
+                                <i class="fas fa-check"></i> <span>${tr_watched}</span>
+                            </button>
+                            <button class="col-action-btn ${isWatchlist ? 'active' : ''}" 
+                                onclick="event.stopPropagation(); app.toggleList('watchlist', ${movie.id}, 'movie')" title="${tr_watchlist}">
+                                <i class="fas fa-bookmark"></i> <span>${tr_watchlist}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
 
     handleWatchAction(type) {
