@@ -689,7 +689,12 @@ class CineTrack {
             this.state.scrollPositions[this.state.currentView] = window.scrollY;
         }
 
-        this.state.previousView = this.state.currentView;
+        // Update previousView only if switching FROM a main view TO a different view
+        // This ensures that when we are in 'watch' view, previousView stays as 'search' or 'watched'
+        const mainViews = ['search', 'watched', 'watchlist', 'profile'];
+        if (viewId !== this.state.currentView && mainViews.includes(this.state.currentView)) {
+            this.state.previousView = this.state.currentView;
+        }
         this.state.currentView = viewId;
 
         // Update Nav
@@ -727,6 +732,7 @@ class CineTrack {
     }
 
     goBack() {
+        // Always return to the main view that opened the player
         this.switchView(this.state.previousView || 'search');
     }
 
