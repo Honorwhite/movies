@@ -1664,3 +1664,459 @@ body.compact-mode .movie-card .movie-title {
         gap: 0.8rem;
     }
 }
+
+/* Watched View Tabs */
+.header-main {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+}
+
+.tab-nav {
+    display: flex;
+    background: var(--bg-card);
+    padding: 4px;
+    border-radius: 100px;
+    border: 1px solid var(--glass-border);
+}
+
+.tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.6rem 1.2rem;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tab-btn:hover {
+    color: var(--text-main);
+}
+
+.tab-btn.active {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 4px 12px var(--primary-glow);
+}
+
+/* Collections Sticker Book Styles */
+.collections-container {
+    padding-bottom: 4rem;
+}
+
+.collection-book {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem;
+    margin-bottom: 3rem;
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.collection-book::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 6px;
+    height: 100%;
+    background: var(--primary);
+    opacity: 0.5;
+}
+
+.collection-book.completed {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.05), var(--bg-card));
+}
+
+.collection-book.completed::before {
+    background: #22c55e;
+}
+
+.book-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2.5rem;
+}
+
+.book-info h3 {
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin-bottom: 0.8rem;
+    color: white;
+}
+
+.book-progress {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.progress-bar {
+    width: 240px;
+    height: 8px;
+    background: var(--bg-dark);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collection-book.completed .progress-fill {
+    background: linear-gradient(90deg, #22c55e, #10b981);
+}
+
+.progress-text {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.completion-badge {
+    width: 60px;
+    height: 60px;
+    background: #22c55e;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+    animation: rotateScale 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes rotateScale {
+    from {
+        transform: scale(0) rotate(-180deg);
+    }
+
+    to {
+        transform: scale(1) rotate(0);
+    }
+}
+
+/* Sticker Grid */
+.sticker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 2rem;
+}
+
+.sticker-item {
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.sticker-poster-wrapper {
+    position: relative;
+    border-radius: var(--radius-md);
+    aspect-ratio: 2/3;
+    overflow: hidden;
+    margin-bottom: 0.8rem;
+    border: 2px solid transparent;
+    transition: var(--transition);
+    background: var(--bg-dark);
+}
+
+.sticker-item.is-watched .sticker-poster-wrapper {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.sticker-item.is-missing .sticker-poster-wrapper {
+    filter: grayscale(100%) opacity(0.3);
+    border: 2px dashed var(--glass-border);
+}
+
+.sticker-item:hover .sticker-poster-wrapper {
+    transform: translateY(-8px) scale(1.02);
+    filter: grayscale(0) opacity(1);
+}
+
+.sticker-item.is-watched:hover .sticker-poster-wrapper {
+    border-color: var(--primary);
+    box-shadow: 0 12px 24px var(--primary-glow);
+}
+
+.sticker-poster-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.sticker-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.sticker-item:hover .sticker-overlay {
+    opacity: 1;
+}
+
+.sticker-overlay i {
+    font-size: 2rem;
+    color: white;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+
+.sticker-item.is-watched .sticker-overlay i {
+    color: #22c55e;
+}
+
+.sticker-info {
+    text-align: center;
+}
+
+.sticker-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 0.2rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sticker-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 6rem 2rem;
+    color: var(--text-dim);
+}
+
+.empty-state i {
+    font-size: 4rem;
+    margin-bottom: 1.5rem;
+    opacity: 0.2;
+}
+
+.empty-state p {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+/* Loader in Center */
+.loader-spinner.center {
+    display: block;
+    margin: 4rem auto;
+}
+
+@media (max-width: 768px) {
+    .header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .tab-nav {
+        width: 100%;
+    }
+
+    .tab-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .book-header {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .progress-bar {
+        width: 100%;
+    }
+
+    .sticker-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 1rem;
+    }
+}
+/* Collection Sub Navigation */
+.col-sub-nav {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+}
+
+.sub-tab-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    padding: 0.5rem 1.5rem;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.sub-tab-btn:hover {
+    color: var(--text-main);
+    border-color: var(--primary);
+}
+
+.sub-tab-btn.active {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    border-color: var(--primary);
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+}
+
+/* Compact Collection Grid */
+.collections-book-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.collection-book {
+    padding: 1.5rem;
+    margin-bottom: 0;
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.book-header-compact {
+    margin-bottom: 1.2rem;
+}
+
+.book-info-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.book-info-top h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70%;
+}
+
+.progress-badge {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--primary);
+    background: rgba(99, 102, 241, 0.1);
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.progress-bar-thin {
+    height: 4px;
+    background: var(--bg-dark);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.progress-fill-thin {
+    height: 100%;
+    background: var(--primary);
+    transition: width 1s ease;
+}
+
+.collection-book.completed .progress-badge {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.collection-book.completed .progress-fill-thin {
+    background: #22c55e;
+}
+
+/* Compact Sticker Grid */
+.sticker-grid-compact {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 0.6rem;
+}
+
+.sticker-thumb {
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.thumb-poster {
+    position: relative;
+    aspect-ratio: 2/3;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-dark);
+    border: 1px solid var(--glass-border);
+}
+
+.sticker-thumb.is-missing .thumb-poster {
+    filter: grayscale(1) brightness(0.4);
+    opacity: 0.5;
+}
+
+.sticker-thumb:hover {
+    transform: scale(1.1);
+    z-index: 10;
+}
+
+.sticker-thumb.is-missing:hover .thumb-poster {
+    filter: grayscale(0) brightness(1);
+    opacity: 1;
+}
+
+.thumb-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.sticker-marker {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    background: #22c55e;
+    color: white;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+@media (max-width: 768px) {
+    .collections-book-grid {
+        grid-template-columns: 1fr;
+    }
+}

@@ -30,7 +30,11 @@ const TRANSLATIONS = {
         back: 'Geri Dön',
         episodes: 'Bölümler',
         seasons: 'Sezonlar',
-        comingSoon: 'YAKINDA'
+        comingSoon: 'YAKINDA',
+        list: 'Liste',
+        collections: 'Koleksiyonlar',
+        ongoing: 'Devam Edenler',
+        completed: 'Tamamlananlar'
     },
     en: {
         explore: 'Explore',
@@ -62,8 +66,12 @@ const TRANSLATIONS = {
         premiumMember: 'Premium Member',
         back: 'Back',
         episodes: 'Episodes',
-        seasons: 'Seasons',
-        comingSoon: 'COMING SOON'
+        seasons: 'Sezonlar',
+        comingSoon: 'COMING SOON',
+        list: 'List',
+        collections: 'Collections',
+        ongoing: 'Ongoing',
+        completed: 'Completed'
     }
 };
 
@@ -104,7 +112,9 @@ class CineTrack {
                 watchlist: { field: '', direction: 'desc' }
             },
             genres: {},
-            scrollPositions: {}
+            scrollPositions: {},
+            collectionsCache: {},
+            colFilter: 'ongoing'
         };
 
         this.init();
@@ -455,6 +465,171 @@ class CineTrack {
         }
     }
 
+    switchWatchedTab(tab, btn) {
+        const listGrid = document.getElementById('watchedList');
+        const listActions = document.getElementById('watchedListActions');
+        const collectionsGrid = document.getElementById('watchedCollections');
+
+        // Update active button
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        if (tab === 'list') {
+            listGrid.style.display = 'grid';
+            listActions.style.display = 'flex';
+            collectionsGrid.style.display = 'none';
+            this.renderGrid(this.state.watched, 'watchedList');
+        } else {
+            listGrid.style.display = 'none';
+            listActions.style.display = 'none';
+            collectionsGrid.style.display = 'block';
+            this.renderCollections();
+        }
+    }
+
+    filterCollections(filter, btn) {
+        this.state.colFilter = filter;
+        document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.renderCollections();
+    }
+
+    async renderCollections() {
+        const wrapper = document.getElementById('collectionsGridWrapper');
+        if (!wrapper) return;
+
+        wrapper.innerHTML = `<div class="loader-spinner center"></div>`;
+
+        // 1. Proactively fetch details for movies that don't have collection info yet
+        // We use a 'deepScan' flag to avoid re-fetching the same movies every time
+        const moviesToRefresh = this.state.watched.filter(m =>
+            (m.media_type === 'movie' || !m.media_type) &&
+            m.belongs_to_collection === undefined &&
+            !m._deepScanned
+        );
+
+        if (moviesToRefresh.length > 0) {
+            // Processing a larger batch (50) to catch up all missing series at once
+            const batch = moviesToRefresh.slice(0, 50);
+            await Promise.all(batch.map(async (m) => {
+                try {
+                    const res = await fetch(`https://api.themoviedb.org/3/movie/${m.id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+                    const details = await res.json();
+
+                    // Update the movie object in state with full details and mark as scanned
+                    const index = this.state.watched.findIndex(w => w.id === m.id);
+                    if (index > -1) {
+                        this.state.watched[index] = { ...this.state.watched[index], ...details, _deepScanned: true };
+                    }
+                } catch (e) {
+                    console.error('Refresh details error:', e);
+                    m._deepScanned = true; // Mark anyway to avoid infinite retry on fail
+                }
+            }));
+            this.saveMovieData(); // Save the updated details
+
+            // If we processed a batch, re-run identification to update the UI immediately
+            return this.renderCollections();
+        }
+
+        // 2. Find all collections from watched movies
+        const collectionIds = [...new Set(this.state.watched
+            .map(m => m.belongs_to_collection ? m.belongs_to_collection.id : null)
+            .filter(Boolean))];
+
+        if (collectionIds.length === 0) {
+            wrapper.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-layer-group"></i>
+                    <p>${this.state.settings.language === 'tr' ? 'Henüz bir koleksiyona ait film izlemediniz.' : 'You haven\'t watched any movies from a collection yet.'}</p>
+                </div>`;
+            return;
+        }
+
+        // 2. Fetch full collection details for all
+        const collectionsData = await Promise.all(collectionIds.map(id => this.fetchCollectionDetails(id)));
+
+        // 3. Filter based on status
+        const today = new Date();
+        const filteredData = collectionsData.filter(collection => {
+            if (!collection) return false;
+
+            // For checking progress, only count released movies as part of the collection
+            const releasedParts = collection.parts.filter(p => p.release_date && new Date(p.release_date) <= today);
+            const watchedInCol = releasedParts.filter(p => this.isInList('watched', p.id));
+
+            const isCompleted = watchedInCol.length === releasedParts.length && releasedParts.length > 0;
+            return this.state.colFilter === 'completed' ? isCompleted : !isCompleted;
+        });
+
+        if (filteredData.length === 0) {
+            const msg = this.state.colFilter === 'completed' ?
+                (this.state.settings.language === 'tr' ? 'Henüz hiçbir seriyi tamamlamadınız!' : 'You haven\'t completed any series yet!') :
+                (this.state.settings.language === 'tr' ? 'Tüm serileri tamamladınız, tebrikler!' : 'You completed all series, congrats!');
+
+            wrapper.innerHTML = `<div class="empty-state"><i class="fas fa-search"></i><p>${msg}</p></div>`;
+            return;
+        }
+
+        // 4. Render each collection as a compact book card
+        wrapper.innerHTML = filteredData.map(collection => {
+            const today = new Date();
+            // Only show released movies in the sticker book grid
+            const releasedParts = collection.parts.filter(p => p.release_date && new Date(p.release_date) <= today);
+            const total = releasedParts.length;
+            const watchedInCol = releasedParts.filter(p => this.isInList('watched', p.id));
+            const count = watchedInCol.length;
+            const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+
+            return `
+                <div class="collection-book ${percent === 100 ? 'completed' : ''}">
+                    <div class="book-header-compact">
+                        <div class="book-info-top">
+                            <h4>${collection.name}</h4>
+                            <span class="progress-badge">${count} / ${total}</span>
+                        </div>
+                        <div class="progress-bar-thin">
+                            <div class="progress-fill-thin" style="width: ${percent}%"></div>
+                        </div>
+                    </div>
+                    <div class="sticker-grid-compact">
+                        ${releasedParts.map(part => {
+                const isWatched = this.isInList('watched', part.id);
+                return `
+                                <div class="sticker-thumb ${isWatched ? 'is-watched' : 'is-missing'}" 
+                                     onclick="app.playMovie(${part.id}, 'movie')" title="${part.title}">
+                                    <div class="thumb-poster">
+                                        <img src="${CONFIG.BASE_IMG + part.poster_path}" alt="${part.title}" loading="lazy">
+                                        ${isWatched ? '<i class="fas fa-check sticker-marker"></i>' : ''}
+                                    </div>
+                                </div>
+                            `;
+            }).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async fetchCollectionDetails(id) {
+        if (this.state.collectionsCache[id]) return this.state.collectionsCache[id];
+
+        // Force English for collection names as requested (Original/English)
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/collection/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+            const data = await res.json();
+            // Sort parts by release date
+            if (data.parts) {
+                data.parts.sort((a, b) => new Date(a.release_date || 0) - new Date(b.release_date || 0));
+            }
+            this.state.collectionsCache[id] = data;
+            return data;
+        } catch (e) {
+            console.error('Collection detail fetch error:', e);
+            return null;
+        }
+    }
+
     formatMinutes(minutes) {
         if (minutes < 60) return `${minutes} dk`;
         const hours = Math.floor(minutes / 60);
@@ -727,7 +902,14 @@ class CineTrack {
 
 
         // Specific View Logic
-        if (viewId === 'watched') this.renderGrid(this.state.watched, 'watchedList');
+        if (viewId === 'watched') {
+            const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab || 'list';
+            if (activeTab === 'collections') {
+                this.renderCollections();
+            } else {
+                this.renderGrid(this.state.watched, 'watchedList');
+            }
+        }
         if (viewId === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
     }
 
