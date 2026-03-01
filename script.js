@@ -103,6 +103,7 @@ class CineTrack {
                 watched: { field: '', direction: 'desc' },
                 watchlist: { field: '', direction: 'desc' }
             },
+            genres: {},
             scrollPositions: {}
         };
 
@@ -115,6 +116,7 @@ class CineTrack {
         this.setupEventListeners();
         this.checkAuth();
         this.initInfiniteScroll();
+        await this.fetchGenres();
 
         // Load initial data in background
         if (this.state.user) {
@@ -235,6 +237,22 @@ class CineTrack {
         if (newPass && newPass.length >= 4) {
             alert(successMsg);
             this.syncWithCloud(); // Sync the fact that data updated (though password is local for now)
+        }
+    }
+
+    async fetchGenres() {
+        try {
+            const [mRes, tRes] = await Promise.all([
+                fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${CONFIG.TMDB_KEY}&language=tr-TR`),
+                fetch(`https://api.themoviedb.org/3/genre/tv/list?api_key=${CONFIG.TMDB_KEY}&language=tr-TR`)
+            ]);
+            const [mList, tList] = await Promise.all([mRes.json(), tRes.json()]);
+
+            [...mList.genres, ...tList.genres].forEach(g => {
+                this.state.genres[g.id] = g.name;
+            });
+        } catch (e) {
+            console.error('Genre fetch error:', e);
         }
     }
 
@@ -366,6 +384,9 @@ class CineTrack {
                             <span class="movie-rating"><i class="fas fa-star"></i> ${movie.vote_average.toFixed(1)}</span>
                             <span>${(movie.release_date || movie.first_air_date || '').split('-')[0]}</span>
                         </div>
+                        <div class="movie-genres">
+                            ${(movie.genre_ids || []).slice(0, 2).map(id => this.state.genres[id]).filter(Boolean).join(' / ')}
+                        </div>
                     </div>
                 </div>
                 <div class="card-footer">
@@ -462,6 +483,11 @@ class CineTrack {
         if (container) {
             const card = container.querySelector(`.movie-card[data-id="${id}"]`);
             if (card) {
+                if (listType === 'ignored' && this.isInList('ignored', id)) {
+                    card.classList.add('fade-out'); // Add an animation if possible
+                    setTimeout(() => card.remove(), 300);
+                    return;
+                }
                 const isAdded = this.isInList('watched', id) || this.isInList('watchlist', id);
                 card.classList.toggle('is-added', isAdded);
 
