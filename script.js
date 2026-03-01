@@ -29,7 +29,8 @@ const TRANSLATIONS = {
         premiumMember: 'Premium Üye',
         back: 'Geri Dön',
         episodes: 'Bölümler',
-        seasons: 'Sezonlar'
+        seasons: 'Sezonlar',
+        comingSoon: 'YAKINDA'
     },
     en: {
         explore: 'Explore',
@@ -61,7 +62,8 @@ const TRANSLATIONS = {
         premiumMember: 'Premium Member',
         back: 'Back',
         episodes: 'Episodes',
-        seasons: 'Seasons'
+        seasons: 'Seasons',
+        comingSoon: 'COMING SOON'
     }
 };
 
@@ -181,7 +183,9 @@ class CineTrack {
 
     updateProfileUI() {
         const profileName = document.getElementById('profileName');
+        const navProfileName = document.getElementById('navProfileName');
         if (profileName) profileName.textContent = this.state.user;
+        if (navProfileName) navProfileName.textContent = this.state.user;
 
         // Sync settings UI
         const compactToggle = document.getElementById('compactToggle');
@@ -268,7 +272,7 @@ class CineTrack {
         if (!query) {
             this.state.isSearching = false;
             this.state.page = 1;
-            this.renderGrid(this.state.trending);
+            this.renderGrid(this.state.trending, 'searchResults', true);
             document.getElementById('gridTitle').textContent = TRANSLATIONS[this.state.settings.language].suggested;
             return;
         }
@@ -306,6 +310,11 @@ class CineTrack {
 
             let footerHtml = '';
             const mType = movie.media_type || 'movie';
+
+            // Check if unreleased
+            const releaseDate = movie.release_date || movie.first_air_date;
+            const isUnreleased = releaseDate && new Date(releaseDate) > new Date();
+            const badgeHtml = isUnreleased ? `<div class="movie-badge">${TRANSLATIONS[lang].comingSoon}</div>` : '';
 
             if (containerId === 'searchResults') {
                 const tr_watched = lang === 'tr' ? 'İzledim' : 'Watched';
@@ -345,9 +354,11 @@ class CineTrack {
             }
 
             const card = document.createElement('div');
-            card.className = `movie-card ${isAdded && containerId === 'searchResults' ? 'is-added' : ''}`;
+            card.className = `movie-card ${isAdded ? 'is-added' : ''} ${isUnreleased ? 'is-unreleased' : ''}`;
+            card.dataset.id = movie.id;
             card.innerHTML = `
                 <div class="poster-wrapper">
+                    ${badgeHtml}
                     <img class="movie-poster" src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.title || movie.name}" loading="lazy">
                     <div class="movie-info">
                         <div class="movie-title">${movie.title || movie.name}</div>
@@ -362,7 +373,10 @@ class CineTrack {
                 </div>
             `;
 
-            card.onclick = () => this.playMovie(movie.id, movie.media_type || 'movie');
+            card.onclick = () => {
+                if (isUnreleased) return;
+                this.playMovie(movie.id, movie.media_type || 'movie');
+            };
             fragment.appendChild(card);
         });
 
@@ -442,7 +456,24 @@ class CineTrack {
         }
 
         this.saveMovieData();
-        this.renderGrid(this.state.trending, 'searchResults', true); // Refresh current view
+
+        // Manual update for search results to avoid full refresh
+        const container = document.getElementById('searchResults');
+        if (container) {
+            const card = container.querySelector(`.movie-card[data-id="${id}"]`);
+            if (card) {
+                const isAdded = this.isInList('watched', id) || this.isInList('watchlist', id);
+                card.classList.toggle('is-added', isAdded);
+
+                // Update specific buttons within the card
+                const watchedBtn = card.querySelector(`[onclick*="watched"]`);
+                const watchlistBtn = card.querySelector(`[onclick*="watchlist"]`);
+
+                if (watchedBtn) watchedBtn.classList.toggle('active', this.isInList('watched', id));
+                if (watchlistBtn) watchlistBtn.classList.toggle('active', this.isInList('watchlist', id));
+            }
+        }
+
         if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList');
         if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
 
@@ -848,13 +879,24 @@ class CineTrack {
         const searchInput = document.getElementById('movieSearch');
         const watchedSearch = document.getElementById('watchedSearch');
         const watchlistSearch = document.getElementById('watchlistSearch');
+        const clearSearch = document.getElementById('clearSearch');
         let debounceTimer;
 
         searchInput?.addEventListener('input', (e) => {
+            const val = e.target.value;
+            if (clearSearch) clearSearch.style.display = val ? 'block' : 'none';
+
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
-                this.searchMovies(e.target.value);
+                this.searchMovies(val);
             }, 500);
+        });
+
+        clearSearch?.addEventListener('click', () => {
+            clearTimeout(debounceTimer);
+            searchInput.value = '';
+            clearSearch.style.display = 'none';
+            this.searchMovies('');
         });
 
         watchedSearch?.addEventListener('input', (e) => {

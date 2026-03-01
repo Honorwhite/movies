@@ -54,7 +54,7 @@
                 <i class="fas fa-bookmark"></i> <span data-i18n="watchlist">İzlenecekler</span>
             </button>
             <button class="nav-btn" onclick="app.switchView('profile')" data-view="profile">
-                <i class="fas fa-user-circle"></i> <span data-i18n="profile">Profil</span>
+                <i class="fas fa-user-circle"></i> <span id="navProfileName">Profil</span>
             </button>
         </div>
     </nav>
@@ -67,6 +67,7 @@
                     <i class="fas fa-search search-icon"></i>
                     <input type="text" id="movieSearch" class="search-input" placeholder="Film veya dizi arayın..."
                         data-i18n-placeholder="searchPlaceholder">
+                    <i id="clearSearch" class="fas fa-times clear-icon" style="display: none;"></i>
                 </div>
             </div>
 

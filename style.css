@@ -265,7 +265,6 @@ body {
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
-        filter: brightness(1);
     }
 }
 
@@ -428,6 +427,22 @@ body {
     font-size: 1.2rem;
 }
 
+.clear-icon {
+    position: absolute;
+    right: 1.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.clear-icon:hover {
+    color: var(--primary);
+    transform: translateY(-50%) scale(1.1);
+}
+
 /* Movie Grid */
 .movie-grid {
     display: grid;
@@ -455,6 +470,47 @@ body {
     overflow: hidden;
 }
 
+.movie-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: var(--secondary);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    z-index: 10;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+/* State: Unreleased AND Added to list (Big, Center, Gray) */
+.movie-card.is-unreleased.is-added .movie-badge {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-10deg);
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 1.2rem;
+    font-weight: 900;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    letter-spacing: 2px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(135deg, var(--secondary), var(--accent));
+}
+
+.movie-card.is-unreleased.is-added .movie-poster {
+    filter: grayscale(100%) brightness(0.4);
+}
+
+.movie-card.is-unreleased {
+    cursor: default;
+}
+
 /* Card Actions Footer */
 
 
@@ -464,9 +520,9 @@ body {
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
 }
 
-.movie-card.is-added {
-    filter: grayscale(0.8) opacity(0.5);
-    border-color: transparent;
+#searchResults .movie-card.is-added:not(.is-unreleased) {
+    filter: grayscale(100%) brightness(0.6);
+    opacity: 0.8;
 }
 
 .movie-card.is-added:hover {
