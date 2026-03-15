@@ -2120,3 +2120,58 @@ body.compact-mode .movie-card .movie-title {
         grid-template-columns: 1fr;
     }
 }
+
+/* Genre & Catalog Chips */
+.genre-chips {
+    display: flex;
+    gap: 0.8rem;
+    overflow-x: auto;
+    padding: 0.5rem 0;
+    margin-bottom: 2.5rem;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none;  /* IE and Edge */
+}
+
+.genre-chips::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+}
+
+.chip {
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 100px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.chip i {
+    font-size: 1.1rem;
+    color: var(--primary);
+    transition: var(--transition);
+}
+
+.chip:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--primary);
+    color: var(--text-main);
+    transform: translateY(-3px);
+}
+
+.chip.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 8px 16px var(--primary-glow);
+}
+
+.chip.active i {
+    color: white;
+}

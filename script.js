@@ -83,6 +83,20 @@ const CONFIG = {
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
 };
 
+const CATALOGS = [
+    { id: 'imdb_top', tr: 'IMDB Top', en: 'IMDB Top', icon: 'fa-star', type: 'movie', endpoint: 'discover/movie?sort_by=vote_average.desc&vote_count.gte=10000' },
+    { id: 'horror', tr: 'Korku Klasikleri', en: 'Horror Classics', icon: 'fa-ghost', type: 'movie', endpoint: 'discover/movie?with_genres=27&primary_release_date.lte=1999-12-31&sort_by=vote_average.desc&vote_count.gte=1000' },
+    { id: 'popular_tv', tr: 'Popüler Diziler', en: 'Popular TV', icon: 'fa-tv', type: 'tv', endpoint: 'discover/tv?sort_by=popularity.desc&vote_count.gte=1000' },
+    { id: 'action', tr: 'Aksiyon', en: 'Action', icon: 'fa-fire', type: 'movie', endpoint: 'discover/movie?with_genres=28&sort_by=popularity.desc' },
+    { id: 'sci_fi', tr: 'Bilim Kurgu', en: 'Sci-Fi', icon: 'fa-robot', type: 'movie', endpoint: 'discover/movie?with_genres=878&sort_by=popularity.desc' },
+    { id: 'comedy', tr: 'Komedi', en: 'Comedy', icon: 'fa-laugh-beam', type: 'movie', endpoint: 'discover/movie?with_genres=35&sort_by=popularity.desc' },
+    { id: 'drama', tr: 'Dram', en: 'Drama', icon: 'fa-theater-masks', type: 'movie', endpoint: 'discover/movie?with_genres=18&sort_by=popularity.desc' },
+    { id: 'adventure', tr: 'Macera', en: 'Adventure', icon: 'fa-mountain', type: 'movie', endpoint: 'discover/movie?with_genres=12&sort_by=popularity.desc' },
+    { id: 'mystery', tr: 'Gizem', en: 'Mystery', icon: 'fa-mask', type: 'movie', endpoint: 'discover/movie?with_genres=9648&sort_by=popularity.desc' },
+    { id: 'thriller', tr: 'Gerilim', en: 'Thriller', icon: 'fa-user-secret', type: 'movie', endpoint: 'discover/movie?with_genres=53&sort_by=popularity.desc' },
+    { id: 'animation', tr: 'Animasyon', en: 'Animation', icon: 'fa-film', type: 'movie', endpoint: 'discover/movie?with_genres=16&sort_by=popularity.desc' }
+];
+
 class CineTrack {
     constructor() {
         this.state = {
@@ -114,7 +128,8 @@ class CineTrack {
             genres: {},
             scrollPositions: {},
             collectionsCache: {},
-            colFilter: 'ongoing'
+            colFilter: 'ongoing',
+            currentCatalog: null
         };
 
         this.init();
@@ -127,6 +142,7 @@ class CineTrack {
         this.checkAuth();
         this.initInfiniteScroll();
         await this.fetchGenres();
+        this.renderCatalogs();
 
         // Load initial data in background
         if (this.state.user) {
@@ -236,6 +252,8 @@ class CineTrack {
             const gridTitle = document.getElementById('gridTitle');
             if (gridTitle) gridTitle.textContent = strings.suggested;
         }
+
+        this.renderCatalogs();
     }
 
     changePassword() {
@@ -253,8 +271,8 @@ class CineTrack {
     async fetchGenres() {
         try {
             const [mRes, tRes] = await Promise.all([
-                fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${CONFIG.TMDB_KEY}&language=tr-TR`),
-                fetch(`https://api.themoviedb.org/3/genre/tv/list?api_key=${CONFIG.TMDB_KEY}&language=tr-TR`)
+                fetch(`https://api.themoviedb.org/3/genre/movie/list?api_key=${CONFIG.TMDB_KEY}&language=en-US`),
+                fetch(`https://api.themoviedb.org/3/genre/tv/list?api_key=${CONFIG.TMDB_KEY}&language=en-US`)
             ]);
             const [mList, tList] = await Promise.all([mRes.json(), tRes.json()]);
 
@@ -272,25 +290,57 @@ class CineTrack {
         this.state.isLoading = true;
 
         try {
-            const res = await fetch(`https://api.themoviedb.org/3/trending/all/week?api_key=${CONFIG.TMDB_KEY}&page=${this.state.page}&language=en-US`);
-            const data = await res.json();
+            let newResults = [];
 
-            // Filter out duplicates based on ID
-            const newResults = data.results.filter(movie =>
-                !this.state.trending.some(existing => existing.id === movie.id)
+            if (this.state.currentCatalog) {
+                // Fetch specific catalog with pagination
+                const catalog = CATALOGS.find(c => c.id === this.state.currentCatalog);
+                if (catalog) {
+                    const connector = catalog.endpoint.includes('?') ? '&' : '?';
+                    const url = `https://api.themoviedb.org/3/${catalog.endpoint}${connector}api_key=${CONFIG.TMDB_KEY}&page=${this.state.page}&language=en-US`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data.results) {
+                        newResults = data.results.map(m => ({ ...m, media_type: m.media_type || catalog.type }));
+                    }
+                }
+            } else {
+                // Fetch popular movies and TV shows for mixed suggested feed
+                const [mRes, tRes] = await Promise.all([
+                    fetch(`https://api.themoviedb.org/3/discover/movie?api_key=${CONFIG.TMDB_KEY}&sort_by=popularity.desc&vote_count.gte=1500&with_original_language=en|fr|de|it|es|ko|ja&page=${this.state.page}&language=en-US`),
+                    fetch(`https://api.themoviedb.org/3/discover/tv?api_key=${CONFIG.TMDB_KEY}&sort_by=popularity.desc&vote_count.gte=1000&with_original_language=en|fr|de|it|es|ko|ja&page=${this.state.page}&language=en-US`)
+                ]);
+
+                const [mData, tData] = await Promise.all([mRes.json(), tRes.json()]);
+
+                const movies = (mData.results || []).map(m => ({ ...m, media_type: 'movie' }));
+                const tv = (tData.results || []).map(t => ({ ...t, media_type: 'tv' }));
+
+                const interleaved = [];
+                const maxLen = Math.max(movies.length, tv.length);
+                for (let i = 0; i < maxLen; i++) {
+                    if (movies[i]) interleaved.push(movies[i]);
+                    if (tv[i]) interleaved.push(tv[i]);
+                }
+                newResults = interleaved;
+            }
+
+            // Filter out existing trending results to avoid duplicates in DOM
+            const filteredResults = newResults.filter(item =>
+                !this.state.trending.some(existing => existing.id === item.id)
             );
 
             if (append) {
-                this.state.trending = [...this.state.trending, ...newResults];
-                this.renderGrid(newResults); // Only append new ones to DOM
+                this.state.trending = [...this.state.trending, ...filteredResults];
+                this.renderGrid(filteredResults);
             } else {
-                this.state.trending = newResults;
-                this.renderGrid(this.state.trending, 'searchResults', true); // Clear and render
+                this.state.trending = filteredResults;
+                this.renderGrid(this.state.trending, 'searchResults', true);
             }
 
             this.state.page++;
         } catch (e) {
-            console.error('Trending fetch error:', e);
+            console.error('Fetch error:', e);
         } finally {
             this.state.isLoading = false;
         }
@@ -312,9 +362,58 @@ class CineTrack {
             this.state.search = data.results.filter(movie => !this.isInList('ignored', movie.id));
             this.renderGrid(this.state.search);
             document.getElementById('gridTitle').textContent = `"${query}" ${TRANSLATIONS[this.state.settings.language].searchResults}`;
+            
+            // Clear catalog selection on search
+            this.state.currentCatalog = null;
+            this.renderCatalogs();
         } catch (e) {
             console.error('Search error:', e);
         }
+    }
+
+    renderCatalogs() {
+        const container = document.getElementById('genreChips');
+        if (!container) return;
+
+        const lang = this.state.settings.language;
+
+        container.innerHTML = CATALOGS.map(cat => `
+            <button class="chip ${this.state.currentCatalog === cat.id ? 'active' : ''}" 
+                    onclick="app.fetchCatalog('${cat.id}')">
+                <i class="fas ${cat.icon}"></i>
+                <span>${cat[lang]}</span>
+            </button>
+        `).join('');
+    }
+
+    async fetchCatalog(catalogId) {
+        if (this.state.isLoading) return;
+
+        // If clicking the same active catalog, toggle back to trending mixed feed
+        if (this.state.currentCatalog === catalogId) {
+            this.state.currentCatalog = null;
+        } else {
+            this.state.currentCatalog = catalogId;
+        }
+
+        this.state.page = 1;
+        this.state.trending = [];
+        this.state.isSearching = false;
+
+        const lang = this.state.settings.language;
+        const catalog = CATALOGS.find(c => c.id === this.state.currentCatalog);
+        document.getElementById('gridTitle').textContent = catalog ? catalog[lang] : TRANSLATIONS[lang].suggested;
+        
+        this.renderCatalogs();
+
+        // Clear search input
+        const searchInput = document.getElementById('movieSearch');
+        if (searchInput) searchInput.value = '';
+        const clearBtn = document.getElementById('clearSearch');
+        if (clearBtn) clearBtn.style.display = 'none';
+
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        await this.fetchTrending(false);
     }
 
 
@@ -387,9 +486,9 @@ class CineTrack {
             card.innerHTML = `
                 <div class="poster-wrapper">
                     ${badgeHtml}
-                    <img class="movie-poster" src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.title || movie.name}" loading="lazy">
+                    <img class="movie-poster" src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.original_title || movie.original_name || movie.title || movie.name}" loading="lazy">
                     <div class="movie-info">
-                        <div class="movie-title">${movie.title || movie.name}</div>
+                        <div class="movie-title">${movie.original_title || movie.original_name || movie.title || movie.name}</div>
                         <div class="movie-meta">
                             <span class="movie-rating"><i class="fas fa-star"></i> ${movie.vote_average.toFixed(1)}</span>
                             <span>${(movie.release_date || movie.first_air_date || '').split('-')[0]}</span>
@@ -942,7 +1041,7 @@ class CineTrack {
 
             // Populate Sidebar & Info
             const titleEl = document.getElementById('watchMovieTitle');
-            if (titleEl) titleEl.textContent = data.title || data.name;
+            if (titleEl) titleEl.textContent = data.original_title || data.original_name || data.title || data.name;
 
             const ratingEl = document.getElementById('watchRating');
             if (ratingEl) ratingEl.textContent = data.vote_average.toFixed(1);
@@ -1040,9 +1139,9 @@ class CineTrack {
 
             return `
                 <div class="col-movie-card ${isCurrent ? 'current' : ''}" onclick="app.playMovie(${movie.id}, 'movie')">
-                    <img src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.title}" loading="lazy">
+                    <img src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.original_title || movie.title}" loading="lazy">
                     <div class="col-movie-info">
-                        <div class="col-movie-title">${movie.title}</div>
+                        <div class="col-movie-title">${movie.original_title || movie.title}</div>
                         <div class="col-movie-year">${(movie.release_date || '').split('-')[0]}</div>
                         <div class="col-movie-actions">
                             <button class="col-action-btn ${isWatched ? 'active' : ''}" 
@@ -1228,7 +1327,7 @@ class CineTrack {
         }
 
         const filtered = list.filter(item => {
-            const title = (item.title || item.name || '').toLowerCase();
+            const title = (item.original_title || item.original_name || item.title || item.name || '').toLowerCase();
             return title.includes(query.toLowerCase());
         });
 
@@ -1255,8 +1354,8 @@ class CineTrack {
             let valB = b[field] || '';
 
             if (field === 'title') {
-                valA = (a.title || a.name || '').toLowerCase();
-                valB = (b.title || b.name || '').toLowerCase();
+                valA = (a.original_title || a.original_name || a.title || a.name || '').toLowerCase();
+                valB = (b.original_title || b.original_name || b.title || b.name || '').toLowerCase();
             } else if (field === 'release_date') {
                 valA = a.release_date || a.first_air_date || '';
                 valB = b.release_date || b.first_air_date || '';
