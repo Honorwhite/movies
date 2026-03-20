@@ -33,8 +33,8 @@ const TRANSLATIONS = {
         comingSoon: 'YAKINDA',
         list: 'Liste',
         collections: 'Koleksiyonlar',
-        ongoing: 'Devam Edenler',
-        completed: 'Tamamlananlar'
+        completed: 'Tamamlananlar',
+        recentlyWatched: 'Son İzlenenler'
     },
     en: {
         explore: 'Explore',
@@ -70,8 +70,8 @@ const TRANSLATIONS = {
         comingSoon: 'COMING SOON',
         list: 'List',
         collections: 'Collections',
-        ongoing: 'Ongoing',
-        completed: 'Completed'
+        completed: 'Completed',
+        recentlyWatched: 'Recently Watched'
     }
 };
 
@@ -106,6 +106,7 @@ class CineTrack {
             trending: [],
             search: [],
             ignored: [],
+            recentlyPlayed: [],
             page: 1,
             isSearching: false,
             isLoading: false,
@@ -352,6 +353,7 @@ class CineTrack {
             this.state.page = 1;
             this.renderGrid(this.state.trending, 'searchResults', true);
             document.getElementById('gridTitle').textContent = TRANSLATIONS[this.state.settings.language].suggested;
+            this.renderRecentlyPlayed();
             return;
         }
 
@@ -366,6 +368,7 @@ class CineTrack {
             // Clear catalog selection on search
             this.state.currentCatalog = null;
             this.renderCatalogs();
+            this.renderRecentlyPlayed();
         } catch (e) {
             console.error('Search error:', e);
         }
@@ -405,6 +408,7 @@ class CineTrack {
         document.getElementById('gridTitle').textContent = catalog ? catalog[lang] : TRANSLATIONS[lang].suggested;
         
         this.renderCatalogs();
+        this.renderRecentlyPlayed();
 
         // Clear search input
         const searchInput = document.getElementById('movieSearch');
@@ -828,6 +832,48 @@ class CineTrack {
         this.syncWithCloud();
     }
 
+    saveRecentlyPlayed() {
+        if (!this.state.user) return;
+        localStorage.setItem(`ct_${this.state.user}_recentlyPlayed`, JSON.stringify(this.state.recentlyPlayed));
+    }
+
+    renderRecentlyPlayed() {
+        const section = document.getElementById('recentlyWatchedSection');
+        const container = document.getElementById('recentlyWatchedResults');
+        if (!section || !container) return;
+
+        if (!this.state.recentlyPlayed || this.state.recentlyPlayed.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        if (this.state.isSearching || this.state.currentCatalog) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+
+        container.innerHTML = this.state.recentlyPlayed.map(movie => {
+            const badgeHtml = movie.type === 'tv' ? `<div class="movie-badge" style="background:var(--primary);color:white;">S${movie.season} E${movie.episode}</div>` : '';
+            return `
+                <div class="movie-card" onclick="app.playMovie(${movie.id}, '${movie.type}')" 
+                     style="min-width: 140px; max-width: 140px; flex: 0 0 auto; scroll-snap-align: start; cursor: pointer;">
+                    <div class="poster-wrapper">
+                        ${badgeHtml}
+                        <img class="movie-poster" src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.title}" loading="lazy">
+                        <div class="movie-info">
+                            <div class="movie-title">${movie.title}</div>
+                            <div class="movie-meta">
+                                <span><i class="fas fa-play"></i> ${this.state.settings.language === 'tr' ? 'Kaldığın Yer' : 'Continue'}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
     async loadMovieData() {
         const prefix = `ct_${this.state.user}_`;
         const legacyPrefix = `user_${this.state.user}_`;
@@ -836,6 +882,7 @@ class CineTrack {
         let watched = localStorage.getItem(prefix + 'watched');
         let watchlist = localStorage.getItem(prefix + 'watchlist');
         let ignored = localStorage.getItem(prefix + 'ignored');
+        let recentlyPlayed = localStorage.getItem(prefix + 'recentlyPlayed');
 
         // 2. Fallback to legacy local storage if empty
         if (!watched) {
@@ -854,11 +901,13 @@ class CineTrack {
         this.state.watched = watched ? JSON.parse(watched) : [];
         this.state.watchlist = watchlist ? JSON.parse(watchlist) : [];
         this.state.ignored = ignored ? JSON.parse(ignored) : [];
+        this.state.recentlyPlayed = recentlyPlayed ? JSON.parse(recentlyPlayed) : [];
 
         // 3. Fetch from Cloud to ensure latest data
         await this.fetchFromCloud();
 
         this.renderStats();
+        this.renderRecentlyPlayed();
         if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList', true);
         if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist', true);
     }
@@ -1019,11 +1068,20 @@ class CineTrack {
 
     // --- Professional Video Player ---
     async playMovie(id, type = 'movie', pushState = true) {
+        const recent = this.state.recentlyPlayed.find(r => r.id === id);
+        let startSeason = 1;
+        let startEpisode = 1;
+        
+        if (type === 'tv' && recent) {
+            startSeason = recent.season || 1;
+            startEpisode = recent.episode || 1;
+        }
+
         this.state.player = {
             id,
             type,
-            season: 1,
-            episode: 1,
+            season: startSeason,
+            episode: startEpisode,
             source: localStorage.getItem('ct_default_source') || 'vidsrc'
         };
 
@@ -1038,6 +1096,7 @@ class CineTrack {
             // Fetch detailed info
             const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
             const data = await res.json();
+            this.state.currentMovieData = data;
 
             // Populate Sidebar & Info
             const titleEl = document.getElementById('watchMovieTitle');
@@ -1243,6 +1302,22 @@ class CineTrack {
     updatePlayerSrc() {
         const iframe = document.getElementById('moviePlayer');
         const { id, type, season, episode, source } = this.state.player;
+
+        // Save recently played
+        if (this.state.currentMovieData && this.state.currentMovieData.id === id) {
+            const meta = this.state.currentMovieData;
+            let list = this.state.recentlyPlayed.filter(r => r.id !== id);
+            list.unshift({ 
+                id, type, season, episode, 
+                timestamp: Date.now(),
+                title: meta.original_title || meta.original_name || meta.title || meta.name || '',
+                poster_path: meta.poster_path || ''
+            });
+            if (list.length > 30) list = list.slice(0, 30);
+            this.state.recentlyPlayed = list;
+            this.saveRecentlyPlayed();
+            if (this.state.currentView === 'search') this.renderRecentlyPlayed();
+        }
 
         let embedUrl = '';
         const s = season;
