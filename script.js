@@ -1082,7 +1082,7 @@ class CineTrack {
             type,
             season: startSeason,
             episode: startEpisode,
-            source: localStorage.getItem('ct_default_source') || 'vidsrc'
+            source: localStorage.getItem('ct_default_source') || 'vidcore'
         };
 
         // Switch to watch view
@@ -1343,6 +1343,14 @@ class CineTrack {
             embedUrl = type === 'movie'
                 ? `https://player.videasy.net/movie/${id}`
                 : `https://player.videasy.net/tv/${id}/${s}/${e}`;
+        } else if (source === 'vidcore') {
+            const theme = '6366f1';
+            const baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true`;
+            if (type === 'movie') {
+                embedUrl = `https://vidcore.net/movie/${id}?${baseParams}`;
+            } else {
+                embedUrl = `https://vidcore.net/tv/${id}/${s}/${e}?${baseParams}&nextButton=true&autoNext=true`;
+            }
         }
 
         if (iframe.contentWindow) {
