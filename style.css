@@ -1193,7 +1193,12 @@ body {
     /* Mobilde sıra: Video -> Kaynak -> Bölümler */
     .video-wrapper {
         order: 1;
-        width: 100%;
+        width: calc(100% + 2rem);
+        margin-left: -1rem;
+        margin-right: -1rem;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
     }
 
     .player-controls-new {
