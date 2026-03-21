@@ -299,37 +299,41 @@
                     <iframe id="moviePlayer" src="" allowfullscreen></iframe>
                 </div>
 
-                <div class="player-controls-new">
-                    <div class="control-group">
-                        <label><i class="fas fa-server"></i> Kaynak</label>
-                        <div class="source-chips" id="sourceChips">
-                            <button class="source-chip active"
-                                onclick="app.updateSource('vidsrc', this)">VidSrc</button>
-                            <button class="source-chip" onclick="app.updateSource('vidfast', this)">VidFast</button>
-                            <button class="source-chip" onclick="app.updateSource('videasy', this)">VidEasy</button>
+                <div class="watch-sidebar">
+                    <div class="sidebar-content">
+                        <div class="player-controls-new">
+                            <div class="control-group">
+                                <label><i class="fas fa-server"></i> Kaynak</label>
+                                <div class="source-chips" id="sourceChips">
+                                    <button class="source-chip active"
+                                        onclick="app.updateSource('vidsrc', this)">VidSrc</button>
+                                    <button class="source-chip" onclick="app.updateSource('vidfast', this)">VidFast</button>
+                                    <button class="source-chip" onclick="app.updateSource('videasy', this)">VidEasy</button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
 
-                <div id="tvSelectorArea" class="tv-selector-area" style="display: none;">
-                    <div class="selector-header">
-                        <h3><i class="fas fa-list"></i> Bölümler</h3>
-                        <select id="seasonSelect" class="season-dropdown" onchange="app.handleSeasonChange()">
-                            <!-- Populated by JS -->
-                        </select>
-                    </div>
-                    <div id="episodeGrid" class="episode-grid">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
+                        <div id="tvSelectorArea" class="tv-selector-area" style="display: none;">
+                            <div class="selector-header">
+                                <h3><i class="fas fa-list"></i> Bölümler</h3>
+                                <select id="seasonSelect" class="season-dropdown" onchange="app.handleSeasonChange()">
+                                    <!-- Populated by JS -->
+                                </select>
+                            </div>
+                            <div id="episodeGrid" class="episode-grid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
 
-                <!-- Collection Area -->
-                <div id="collectionArea" class="collection-area" style="display: none;">
-                    <div class="selector-header">
-                        <h3 id="collectionTitle"><i class="fas fa-layer-group"></i> Seri Filmleri</h3>
-                    </div>
-                    <div id="collectionGrid" class="collection-grid">
-                        <!-- Populated by JS -->
+                        <!-- Collection Area -->
+                        <div id="collectionArea" class="collection-area" style="display: none;">
+                            <div class="selector-header">
+                                <h3 id="collectionTitle"><i class="fas fa-layer-group"></i> Seri Filmleri</h3>
+                            </div>
+                            <div id="collectionGrid" class="collection-grid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

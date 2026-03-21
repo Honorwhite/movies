@@ -1249,8 +1249,9 @@ class CineTrack {
 
     async fetchTvMeta(id) {
         const seasonSelect = document.getElementById('seasonSelect');
+        const lang = this.state.currentMovieData?.original_language || 'en';
         try {
-            const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+            const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${CONFIG.TMDB_KEY}&language=${lang}`);
             const data = await res.json();
 
             seasonSelect.innerHTML = data.seasons
@@ -1269,12 +1270,19 @@ class CineTrack {
         const episodeGrid = document.getElementById('episodeGrid');
         this.state.player.season = season;
 
+        const lang = this.state.currentMovieData?.original_language || 'en';
         try {
-            const res = await fetch(`https://api.themoviedb.org/3/tv/${this.state.player.id}/season/${season}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+            const res = await fetch(`https://api.themoviedb.org/3/tv/${this.state.player.id}/season/${season}?api_key=${CONFIG.TMDB_KEY}&language=${lang}`);
             const data = await res.json();
 
             episodeGrid.innerHTML = data.episodes
-                .map(e => `<button class="ep-btn ${this.state.player.episode == e.episode_number ? 'active' : ''}" onclick="app.playEpisode(${e.episode_number}, this)">${e.episode_number}</button>`)
+                .map(e => `
+                    <button class="ep-btn ${this.state.player.episode == e.episode_number ? 'active' : ''}" 
+                            onclick="app.playEpisode(${e.episode_number}, this)">
+                        <span class="ep-num">${e.episode_number}</span>
+                        <span class="ep-name">${e.name}</span>
+                    </button>
+                `)
                 .join('');
 
             // If we just swapped seasons, reset to ep 1 unless it's the first load
