@@ -6,10 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CineTrack | Film & Dizi Takip</title>
 
-    <!-- PWA & SEO -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#6366f1">
-    <link rel="icon" type="image/png" href="appimages/android/android-launchericon-192-192.png">
+    <link rel="icon" type="image/png" href="icon.png">
 
     <!-- Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,7 +74,8 @@
                     <h3 class="section-title" id="recentTitle" data-i18n="recentlyWatched">Son İzlenenler</h3>
                 </div>
                 <!-- Horizontal Scrollable Grid -->
-                <div id="recentlyWatchedResults" class="movie-grid horizontal-scroll" style="display: flex; overflow-x: auto; gap: 1rem; padding-bottom: 1rem; flex-wrap: nowrap; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;">
+                <div id="recentlyWatchedResults" class="movie-grid horizontal-scroll"
+                    style="display: flex; overflow-x: auto; gap: 1rem; padding-bottom: 1rem; flex-wrap: nowrap; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;">
                     <!-- Cards injected here -->
                 </div>
             </div>
@@ -85,7 +83,7 @@
             <div class="section-header">
                 <h3 class="section-title" id="gridTitle" data-i18n="suggested">Önerilenler</h3>
             </div>
-            
+
             <div id="genreChips" class="genre-chips">
                 <!-- Genre chips if needed -->
             </div>
@@ -193,14 +191,14 @@
                     <div class="p-avatar"><i class="fas fa-user-circle"></i></div>
                     <div class="p-info">
                         <h3 id="profileName">Kullanıcı Adı</h3>
-                        <span class="p-status" data-i18n="premiumMember">Premium Üye</span>
+                        <span class="p-status" data-i18n="premiumMember">PREMIUM ÜYE</span>
                     </div>
                 </div>
 
                 <!-- App Settings -->
                 <h4 class="settings-section-title" data-i18n="appOptions">Uygulama Seçenekleri</h4>
                 <div class="settings-list">
-                    <div class="settings-item">
+                    <div class="settings-item" onclick="document.getElementById('compactToggle').click()">
                         <div class="s-text">
                             <i class="fas fa-magic"></i>
                             <div>
@@ -208,27 +206,28 @@
                                 <small data-i18n="compactDesc">Grid yapısını daha sıkı hale getirir</small>
                             </div>
                         </div>
-                        <label class="switch">
+                        <label class="switch" onclick="event.stopPropagation()">
                             <input type="checkbox" id="compactToggle" onchange="app.toggleCompactMode(this.checked)">
                             <span class="slider"></span>
                         </label>
                     </div>
 
-                    <div class="settings-item">
+                    <div class="settings-item" onclick="document.getElementById('autoPlayToggle').click()">
                         <div class="s-text">
                             <i class="fas fa-play-circle"></i>
                             <div>
                                 <span data-i18n="autoPlay">Otomatik Oynat</span>
-                                <small data-i18n="autoPlayDesc">Fragmanları otomatik başlat</small>
+                                <small data-i18n="autoPlayDesc">Filmi otomatik başlat</small>
                             </div>
                         </div>
-                        <label class="switch">
-                            <input type="checkbox" checked>
+                        <label class="switch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="autoPlayToggle" onchange="app.toggleAutoPlay(this.checked)"
+                                checked>
                             <span class="slider"></span>
                         </label>
                     </div>
 
-                    <div class="settings-item">
+                    <div class="settings-item" onclick="document.getElementById('autoSubToggle').click()">
                         <div class="s-text">
                             <i class="fas fa-closed-captioning"></i>
                             <div>
@@ -236,13 +235,13 @@
                                 <small data-i18n="autoTurkishSubDesc">Altyazıyı otomatik Türkçe seçer</small>
                             </div>
                         </div>
-                        <label class="switch">
+                        <label class="switch" onclick="event.stopPropagation()">
                             <input type="checkbox" id="autoSubToggle" onchange="app.toggleAutoTurkishSub(this.checked)">
                             <span class="slider"></span>
                         </label>
                     </div>
 
-                    <div class="settings-item">
+                    <div class="settings-item" onclick="document.getElementById('autoSourceToggle').click()">
                         <div class="s-text">
                             <i class="fas fa-server"></i>
                             <div>
@@ -250,8 +249,22 @@
                                 <small data-i18n="autoSourceDesc">Her zaman ilk kaynağı öncelikli seçer</small>
                             </div>
                         </div>
-                        <label class="switch">
+                        <label class="switch" onclick="event.stopPropagation()">
                             <input type="checkbox" id="autoSourceToggle" onchange="app.toggleAutoSource(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-item" onclick="document.getElementById('tvModeToggle').click()">
+                        <div class="s-text">
+                            <i class="fas fa-tv"></i>
+                            <div>
+                                <span data-i18n="tvMode">TV Modu</span>
+                                <small data-i18n="tvModeDesc">Kumanda ile kullanım için optimize eder</small>
+                            </div>
+                        </div>
+                        <label class="switch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="tvModeToggle" onchange="app.toggleTVMode(this.checked)">
                             <span class="slider"></span>
                         </label>
                     </div>
@@ -324,7 +337,9 @@
 
             <div class="watch-container">
                 <div class="video-wrapper">
-                    <iframe id="moviePlayer" src="" allowfullscreen allow="autoplay; encrypted-media; gyroscope; picture-in-picture; accelerometer; clipboard-write; display-capture" referrerpolicy="no-referrer"></iframe>
+                    <iframe id="moviePlayer" src="" allowfullscreen
+                        allow="autoplay; encrypted-media; gyroscope; picture-in-picture; accelerometer; clipboard-write; display-capture"
+                        referrerpolicy="no-referrer"></iframe>
                 </div>
 
                 <div class="watch-sidebar">
@@ -333,10 +348,14 @@
                             <div class="control-group">
                                 <label><i class="fas fa-server"></i> Kaynak</label>
                                 <div class="source-chips" id="sourceChips">
-                                    <button class="source-chip active" onclick="app.updateSource('vidcore', this)">VidCore</button>
-                                    <button class="source-chip" onclick="app.updateSource('vidsrc', this)">VidSrc</button>
-                                    <button class="source-chip" onclick="app.updateSource('vidfast', this)">VidFast</button>
-                                    <button class="source-chip" onclick="app.updateSource('videasy', this)">VidEasy</button>
+                                    <button class="source-chip active"
+                                        onclick="app.updateSource('vidcore', this)">VidCore</button>
+                                    <button class="source-chip"
+                                        onclick="app.updateSource('vidsrc', this)">VidSrc</button>
+                                    <button class="source-chip"
+                                        onclick="app.updateSource('vidfast', this)">VidFast</button>
+                                    <button class="source-chip"
+                                        onclick="app.updateSource('videasy', this)">VidEasy</button>
                                 </div>
                             </div>
                         </div>

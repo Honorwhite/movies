@@ -18,7 +18,7 @@ const TRANSLATIONS = {
         compactMode: 'Kompakt Görünüm',
         compactDesc: 'Grid yapısını daha sıkı hale getirir',
         autoPlay: 'Otomatik Oynat',
-        autoPlayDesc: 'Fragmanları otomatik başlat',
+        autoPlayDesc: 'Filmi otomatik başlat',
         uiLanguage: 'Arayüz Dili',
         uiLanguageDesc: 'Uygulama dilini değiştir',
         accountData: 'Hesap ve Veri',
@@ -26,7 +26,7 @@ const TRANSLATIONS = {
         changePasswordDesc: 'Hesap güvenliğini güncelle',
         logout: 'Oturumu Kapat',
         logoutDesc: 'Bu cihazdaki oturumu sonlandır',
-        premiumMember: 'Premium Üye',
+        premiumMember: 'PREMIUM ÜYE',
         back: 'Geri Dön',
         episodes: 'Bölümler',
         seasons: 'Sezonlar',
@@ -38,7 +38,9 @@ const TRANSLATIONS = {
         autoTurkishSub: 'Otomatik Türkçe Altyazı',
         autoTurkishSubDesc: 'Altyazıyı otomatik Türkçe seçer',
         autoSource: 'Otomatik Kaynak Seçimi',
-        autoSourceDesc: 'Her zaman ilk kaynağı öncelikli seçer'
+        autoSourceDesc: 'Her zaman ilk kaynağı öncelikli seçer',
+        tvMode: 'TV Modu',
+        tvModeDesc: 'Kumanda ile kullanım için optimize eder'
     },
     en: {
         explore: 'Explore',
@@ -79,7 +81,9 @@ const TRANSLATIONS = {
         autoTurkishSub: 'Auto Turkish Subtitles',
         autoTurkishSubDesc: 'Automatically selects Turkish subtitles',
         autoSource: 'Auto Source Selection',
-        autoSourceDesc: 'Always prioritizes the first source'
+        autoSourceDesc: 'Always prioritizes the first source',
+        tvMode: 'TV Mode',
+        tvModeDesc: 'Optimizes for remote control use'
     }
 };
 
@@ -105,6 +109,173 @@ const CATALOGS = [
     { id: 'animation', tr: 'Animasyon', en: 'Animation', icon: 'fa-film', type: 'movie', endpoint: 'discover/movie?with_genres=16&sort_by=popularity.desc' }
 ];
 
+
+class KeyboardManager {
+    constructor(app) {
+        this.app = app;
+        this.focusedIndex = -1;
+        this.navigableElements = [];
+        this.handleKeyDown = this.handleKeyDown.bind(this);
+    }
+
+    init() {
+        window.addEventListener('keydown', this.handleKeyDown);
+        this.refreshNavigableElements();
+    }
+
+    destroy() {
+        window.removeEventListener('keydown', this.handleKeyDown);
+        this.clearFocus();
+    }
+
+    refreshNavigableElements() {
+        const view = document.querySelector('.view.active');
+        const authOverlay = document.getElementById('authOverlay');
+        const isAuthVisible = authOverlay && authOverlay.style.display !== 'none';
+
+        if (!view && !isAuthVisible) return;
+
+        let elements = [];
+
+        if (isAuthVisible) {
+            elements = [...authOverlay.querySelectorAll('input, button')];
+        } else {
+            // Collect all interactive elements in the current view + global nav
+            elements = [
+                ...document.querySelectorAll('.nav-btn'),
+                ...view.querySelectorAll('input, button, .movie-card, .chip, .source-chip, .ep-btn, .col-movie-card, select')
+            ];
+        }
+
+        this.navigableElements = elements.filter(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none' && window.getComputedStyle(el).visibility !== 'hidden';
+        });
+
+        // If nothing is focused, focus the first element
+        if (this.focusedIndex === -1 && elements.length > 0) {
+            this.setFocus(0);
+        }
+    }
+
+    handleKeyDown(e) {
+        if (!this.app.state.settings.tvMode) return;
+
+        // Skip keyboard nav if typing in an input (unless it's ArrowDown/Up to leave input)
+        if (document.activeElement.tagName === 'INPUT' && !['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(e.key)) {
+            return;
+        }
+
+        this.refreshNavigableElements();
+
+        switch (e.key) {
+            case 'ArrowRight':
+                this.moveFocus(1);
+                e.preventDefault();
+                break;
+            case 'ArrowLeft':
+                this.moveFocus(-1);
+                e.preventDefault();
+                break;
+            case 'ArrowDown':
+                this.moveFocusGrid('down');
+                e.preventDefault();
+                break;
+            case 'ArrowUp':
+                this.moveFocusGrid('up');
+                e.preventDefault();
+                break;
+            case 'Enter':
+                this.clickFocused();
+                e.preventDefault();
+                break;
+            case 'Escape':
+            case 'Backspace':
+                if (this.app.state.currentView === 'watch') {
+                    this.app.goBack();
+                } else if (this.app.state.currentView !== 'search') {
+                    this.app.switchView('search');
+                }
+                e.preventDefault();
+                break;
+        }
+    }
+
+    moveFocus(delta) {
+        let next = this.focusedIndex + delta;
+        if (next < 0) next = 0;
+        if (next >= this.navigableElements.length) next = this.navigableElements.length - 1;
+        this.setFocus(next);
+    }
+
+    moveFocusGrid(direction) {
+        if (this.focusedIndex === -1) return this.setFocus(0);
+
+        const currentRect = this.navigableElements[this.focusedIndex].getBoundingClientRect();
+        const currentCenter = currentRect.left + currentRect.width / 2;
+
+        let bestMatch = -1;
+        let bestDistance = Infinity;
+
+        this.navigableElements.forEach((el, index) => {
+            if (index === this.focusedIndex) return;
+
+            const rect = el.getBoundingClientRect();
+            const center = rect.left + rect.width / 2;
+
+            if (direction === 'down' && rect.top >= currentRect.bottom - 5) {
+                const dist = Math.abs(center - currentCenter) + (rect.top - currentRect.bottom);
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestMatch = index;
+                }
+            } else if (direction === 'up' && rect.bottom <= currentRect.top + 5) {
+                const dist = Math.abs(center - currentCenter) + (currentRect.top - rect.bottom);
+                if (dist < bestDistance) {
+                    bestDistance = dist;
+                    bestMatch = index;
+                }
+            }
+        });
+
+        if (bestMatch !== -1) {
+            this.setFocus(bestMatch);
+        } else if (direction === 'up') {
+            // If we can't go up anymore in the view, try focusing the nav
+            const navBtns = document.querySelectorAll('.nav-btn');
+            if (navBtns.length > 0) {
+                const firstNavBtn = Array.from(this.navigableElements).findIndex(el => el.classList.contains('nav-btn'));
+                if (firstNavBtn !== -1) this.setFocus(firstNavBtn);
+            }
+        }
+    }
+
+    setFocus(index) {
+        this.clearFocus();
+        this.focusedIndex = index;
+        const el = this.navigableElements[index];
+        if (el) {
+            el.classList.add('focused');
+            el.focus();
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    clearFocus() {
+        this.navigableElements.forEach(el => el.classList.remove('focused'));
+    }
+
+    clickFocused() {
+        if (this.focusedIndex !== -1) {
+            const el = this.navigableElements[this.focusedIndex];
+            el.click();
+
+            // Re-refresh after click as view might have changed
+            setTimeout(() => this.refreshNavigableElements(), 100);
+        }
+    }
+}
+
 class CineTrack {
     constructor() {
         this.state = {
@@ -124,7 +295,9 @@ class CineTrack {
                 compactMode: localStorage.getItem('ct_compact_mode') === 'true',
                 language: localStorage.getItem('ct_lang') || 'tr',
                 autoTurkishSub: localStorage.getItem('ct_auto_tr_sub') === 'true',
-                autoSource: localStorage.getItem('ct_auto_source') === 'true'
+                autoSource: localStorage.getItem('ct_auto_source') === 'true',
+                tvMode: localStorage.getItem('ct_tv_mode') === 'true',
+                autoPlay: localStorage.getItem('ct_auto_play') !== 'false'
             },
             player: {
                 id: null,
@@ -157,17 +330,17 @@ class CineTrack {
 
         // Load initial data in background
         if (this.state.user) {
-            await this.loadMovieData();
+            this.loadMovieData(); // No await here to speed up startup
             this.fetchTrending();
         }
 
         // Initial UI translation
         this.setLanguageUI();
 
-        // Hide loader
+        // Hide loader much faster
         setTimeout(() => {
             document.getElementById('appLoader').classList.add('hidden');
-        }, 800);
+        }, 300);
     }
 
     // --- Auth & Storage ---
@@ -213,6 +386,11 @@ class CineTrack {
         this.updateProfileUI();
         await this.loadMovieData();
         this.fetchTrending();
+
+        if (this.state.settings.tvMode && this.keyboardManager) {
+            this.keyboardManager.focusedIndex = -1;
+            this.keyboardManager.refreshNavigableElements();
+        }
     }
 
     logout() {
@@ -239,6 +417,13 @@ class CineTrack {
         const autoSourceToggle = document.getElementById('autoSourceToggle');
         if (autoSourceToggle) autoSourceToggle.checked = this.state.settings.autoSource;
 
+        const tvModeToggle = document.getElementById('tvModeToggle');
+        if (tvModeToggle) tvModeToggle.checked = this.state.settings.tvMode;
+
+        const autoPlayToggle = document.getElementById('autoPlayToggle');
+        if (autoPlayToggle) autoPlayToggle.checked = this.state.settings.autoPlay;
+
+        this.applySettings();
         this.setLanguageUI();
     }
 
@@ -919,13 +1104,18 @@ class CineTrack {
         this.state.ignored = ignored ? JSON.parse(ignored) : [];
         this.state.recentlyPlayed = recentlyPlayed ? JSON.parse(recentlyPlayed) : [];
 
-        // 3. Fetch from Cloud to ensure latest data
-        await this.fetchFromCloud();
+        this.state.recentlyPlayed = recentlyPlayed ? JSON.parse(recentlyPlayed) : [];
 
         this.renderStats();
         this.renderRecentlyPlayed();
-        if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList', true);
-        if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist', true);
+
+        // 3. Fetch from Cloud in background (Non-blocking)
+        this.fetchFromCloud().then(() => {
+            this.renderStats();
+            this.renderRecentlyPlayed();
+            if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList', true);
+            if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist', true);
+        });
     }
 
     async fetchFromCloud() {
@@ -976,6 +1166,21 @@ class CineTrack {
     // --- Settings & UI ---
     applySettings() {
         document.body.classList.toggle('compact-mode', this.state.settings.compactMode);
+        document.body.classList.toggle('tv-mode', this.state.settings.tvMode);
+
+        if (this.state.settings.tvMode) {
+            if (!this.keyboardManager) this.keyboardManager = new KeyboardManager(this);
+            this.keyboardManager.init();
+        } else if (this.keyboardManager) {
+            this.keyboardManager.destroy();
+        }
+    }
+
+    toggleTVMode(enabled) {
+        this.state.settings.tvMode = enabled;
+        localStorage.setItem('ct_tv_mode', enabled);
+        this.applySettings();
+        this.syncWithCloud();
     }
 
     toggleCompactMode(enabled) {
@@ -994,6 +1199,12 @@ class CineTrack {
     toggleAutoSource(enabled) {
         this.state.settings.autoSource = enabled;
         localStorage.setItem('ct_auto_source', enabled);
+        this.syncWithCloud();
+    }
+
+    toggleAutoPlay(enabled) {
+        this.state.settings.autoPlay = enabled;
+        localStorage.setItem('ct_auto_play', enabled);
         this.syncWithCloud();
     }
 
@@ -1099,6 +1310,11 @@ class CineTrack {
             }
         }
         if (viewId === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
+
+        if (this.state.settings.tvMode && this.keyboardManager) {
+            this.keyboardManager.focusedIndex = -1;
+            setTimeout(() => this.keyboardManager.refreshNavigableElements(), 300);
+        }
     }
 
     goBack() {
@@ -1371,27 +1587,31 @@ class CineTrack {
         const s = season;
         const e = episode;
 
+        const autoPlayParam = this.state.settings.autoPlay ? 'autoplay=1&autoPlay=true' : 'autoplay=0&autoPlay=false';
+
         if (source === 'vidfast') {
             embedUrl = type === 'movie'
                 ? `https://vidfast.pro/movie/${id}`
                 : `https://vidfast.pro/tv/${id}/${s}/${e}`;
             const connector = embedUrl.includes('?') ? '&' : '?';
-            if (this.state.settings.autoTurkishSub) embedUrl += `${connector}sub_lang=tr`;
+            embedUrl += `${connector}${autoPlayParam}`;
+            if (this.state.settings.autoTurkishSub) embedUrl += `&sub_lang=tr`;
         } else if (source === 'vidsrc') {
-            // Updated to use a more stable vidsrc embed
             embedUrl = type === 'movie'
                 ? `https://vsembed.ru/embed/movie/${id}?quality=1080`
                 : `https://vsembed.ru/embed/tv/${id}/${s}/${e}?quality=1080`;
+            embedUrl += `&${autoPlayParam}`;
             if (this.state.settings.autoTurkishSub) embedUrl += '&sub_lang=tur&ds_lang=tr';
         } else if (source === 'videasy') {
             embedUrl = type === 'movie'
                 ? `https://player.videasy.net/movie/${id}`
                 : `https://player.videasy.net/tv/${id}/${s}/${e}`;
             const connector = embedUrl.includes('?') ? '&' : '?';
-            if (this.state.settings.autoTurkishSub) embedUrl += `${connector}sub_lang=tr`;
+            embedUrl += `${connector}${autoPlayParam}`;
+            if (this.state.settings.autoTurkishSub) embedUrl += `&sub_lang=tr`;
         } else if (source === 'vidcore') {
             const theme = '6366f1';
-            let baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true&quality=1080`;
+            let baseParams = `${autoPlayParam}&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true&quality=1080`;
             if (this.state.settings.autoTurkishSub) baseParams += '&sub=tr';
             if (type === 'movie') {
                 embedUrl = `https://vidcore.net/movie/${id}?${baseParams}`;
@@ -1576,6 +1796,8 @@ class CineTrack {
     }
 }
 
+
 // Global instance for onclick handlers
 const app = new CineTrack();
 window.app = app;
+
