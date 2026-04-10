@@ -1389,7 +1389,7 @@ class CineTrack {
         } else if (source === 'vidcore') {
             const theme = '6366f1';
             let baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true`;
-            if (this.state.settings.autoTurkishSub) baseParams += '&sub_lang=tr';
+            if (this.state.settings.autoTurkishSub) baseParams += '&sub=tr';
             if (type === 'movie') {
                 embedUrl = `https://vidcore.net/movie/${id}?${baseParams}`;
             } else {
