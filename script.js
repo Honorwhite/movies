@@ -380,7 +380,7 @@ class CineTrack {
             this.state.search = data.results.filter(movie => !this.isInList('ignored', movie.id));
             this.renderGrid(this.state.search);
             document.getElementById('gridTitle').textContent = `"${query}" ${TRANSLATIONS[this.state.settings.language].searchResults}`;
-            
+
             // Clear catalog selection on search
             this.state.currentCatalog = null;
             this.renderCatalogs();
@@ -422,7 +422,7 @@ class CineTrack {
         const lang = this.state.settings.language;
         const catalog = CATALOGS.find(c => c.id === this.state.currentCatalog);
         document.getElementById('gridTitle').textContent = catalog ? catalog[lang] : TRANSLATIONS[lang].suggested;
-        
+
         this.renderCatalogs();
         this.renderRecentlyPlayed();
 
@@ -1111,7 +1111,7 @@ class CineTrack {
         const recent = this.state.recentlyPlayed.find(r => r.id === id);
         let startSeason = 1;
         let startEpisode = 1;
-        
+
         if (type === 'tv' && recent) {
             startSeason = recent.season || 1;
             startEpisode = recent.episode || 1;
@@ -1355,8 +1355,8 @@ class CineTrack {
         if (this.state.currentMovieData && this.state.currentMovieData.id === id) {
             const meta = this.state.currentMovieData;
             let list = this.state.recentlyPlayed.filter(r => r.id !== id);
-            list.unshift({ 
-                id, type, season, episode, 
+            list.unshift({
+                id, type, season, episode,
                 timestamp: Date.now(),
                 title: meta.original_title || meta.original_name || meta.title || meta.name || '',
                 poster_path: meta.poster_path || ''
@@ -1375,20 +1375,23 @@ class CineTrack {
             embedUrl = type === 'movie'
                 ? `https://vidfast.pro/movie/${id}`
                 : `https://vidfast.pro/tv/${id}/${s}/${e}`;
-            if (this.state.settings.autoTurkishSub) embedUrl += '?sub_lang=tr';
+            const connector = embedUrl.includes('?') ? '&' : '?';
+            if (this.state.settings.autoTurkishSub) embedUrl += `${connector}sub_lang=tr`;
         } else if (source === 'vidsrc') {
+            // Updated to use a more stable vidsrc embed
             embedUrl = type === 'movie'
-                ? `https://vidsrc.xyz/embed/movie/${id}`
-                : `https://vidsrc.xyz/embed/tv/${id}/${s}/${e}`;
-            if (this.state.settings.autoTurkishSub) embedUrl += '?sub_lang=tur&ds_lang=tr';
+                ? `https://vsembed.ru/embed/movie/${id}?quality=1080`
+                : `https://vsembed.ru/embed/tv/${id}/${s}/${e}?quality=1080`;
+            if (this.state.settings.autoTurkishSub) embedUrl += '&sub_lang=tur&ds_lang=tr';
         } else if (source === 'videasy') {
             embedUrl = type === 'movie'
                 ? `https://player.videasy.net/movie/${id}`
                 : `https://player.videasy.net/tv/${id}/${s}/${e}`;
-            if (this.state.settings.autoTurkishSub) embedUrl += '?sub_lang=tr';
+            const connector = embedUrl.includes('?') ? '&' : '?';
+            if (this.state.settings.autoTurkishSub) embedUrl += `${connector}sub_lang=tr`;
         } else if (source === 'vidcore') {
             const theme = '6366f1';
-            let baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true`;
+            let baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true&quality=1080`;
             if (this.state.settings.autoTurkishSub) baseParams += '&sub=tr';
             if (type === 'movie') {
                 embedUrl = `https://vidcore.net/movie/${id}?${baseParams}`;
