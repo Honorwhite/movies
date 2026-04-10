@@ -228,6 +228,34 @@
                         </label>
                     </div>
 
+                    <div class="settings-item">
+                        <div class="s-text">
+                            <i class="fas fa-closed-captioning"></i>
+                            <div>
+                                <span data-i18n="autoTurkishSub">Otomatik Türkçe Altyazı</span>
+                                <small data-i18n="autoTurkishSubDesc">Altyazıyı otomatik Türkçe seçer</small>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="autoSubToggle" onchange="app.toggleAutoTurkishSub(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
+                    <div class="settings-item">
+                        <div class="s-text">
+                            <i class="fas fa-server"></i>
+                            <div>
+                                <span data-i18n="autoSource">Otomatik Kaynak Seçimi</span>
+                                <small data-i18n="autoSourceDesc">Her zaman ilk kaynağı öncelikli seçer</small>
+                            </div>
+                        </div>
+                        <label class="switch">
+                            <input type="checkbox" id="autoSourceToggle" onchange="app.toggleAutoSource(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
                     <div class="settings-item" onclick="app.toggleLanguage()">
                         <div class="s-text">
                             <i class="fas fa-language"></i>

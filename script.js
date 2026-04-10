@@ -34,7 +34,11 @@ const TRANSLATIONS = {
         list: 'Liste',
         collections: 'Koleksiyonlar',
         completed: 'Tamamlananlar',
-        recentlyWatched: 'Son İzlenenler'
+        recentlyWatched: 'Son İzlenenler',
+        autoTurkishSub: 'Otomatik Türkçe Altyazı',
+        autoTurkishSubDesc: 'Altyazıyı otomatik Türkçe seçer',
+        autoSource: 'Otomatik Kaynak Seçimi',
+        autoSourceDesc: 'Her zaman ilk kaynağı öncelikli seçer'
     },
     en: {
         explore: 'Explore',
@@ -71,7 +75,11 @@ const TRANSLATIONS = {
         list: 'List',
         collections: 'Collections',
         completed: 'Completed',
-        recentlyWatched: 'Recently Watched'
+        recentlyWatched: 'Recently Watched',
+        autoTurkishSub: 'Auto Turkish Subtitles',
+        autoTurkishSubDesc: 'Automatically selects Turkish subtitles',
+        autoSource: 'Auto Source Selection',
+        autoSourceDesc: 'Always prioritizes the first source'
     }
 };
 
@@ -114,7 +122,9 @@ class CineTrack {
             previousView: 'search',
             settings: {
                 compactMode: localStorage.getItem('ct_compact_mode') === 'true',
-                language: localStorage.getItem('ct_lang') || 'tr'
+                language: localStorage.getItem('ct_lang') || 'tr',
+                autoTurkishSub: localStorage.getItem('ct_auto_tr_sub') === 'true',
+                autoSource: localStorage.getItem('ct_auto_source') === 'true'
             },
             player: {
                 id: null,
@@ -222,6 +232,12 @@ class CineTrack {
 
         const langLabel = document.getElementById('currentLangLabel');
         if (langLabel) langLabel.textContent = this.state.settings.language.toUpperCase();
+
+        const autoSubToggle = document.getElementById('autoSubToggle');
+        if (autoSubToggle) autoSubToggle.checked = this.state.settings.autoTurkishSub;
+
+        const autoSourceToggle = document.getElementById('autoSourceToggle');
+        if (autoSourceToggle) autoSourceToggle.checked = this.state.settings.autoSource;
 
         this.setLanguageUI();
     }
@@ -939,6 +955,16 @@ class CineTrack {
                     localStorage.setItem(`ct_${this.state.user}_watchlist`, JSON.stringify(this.state.watchlist));
                     localStorage.setItem(`ct_${this.state.user}_ignored`, JSON.stringify(this.state.ignored));
 
+                    if (cloudData.settings) {
+                        this.state.settings = { ...this.state.settings, ...cloudData.settings };
+                        localStorage.setItem('ct_compact_mode', this.state.settings.compactMode);
+                        localStorage.setItem('ct_lang', this.state.settings.language);
+                        localStorage.setItem('ct_auto_tr_sub', this.state.settings.autoTurkishSub);
+                        localStorage.setItem('ct_auto_source', this.state.settings.autoSource === true);
+                        this.applySettings();
+                        this.updateProfileUI();
+                    }
+
                     console.log('Data restored from Supabase');
                 }
             }
@@ -956,6 +982,19 @@ class CineTrack {
         this.state.settings.compactMode = enabled;
         localStorage.setItem('ct_compact_mode', enabled);
         this.applySettings();
+        this.syncWithCloud();
+    }
+
+    toggleAutoTurkishSub(enabled) {
+        this.state.settings.autoTurkishSub = enabled;
+        localStorage.setItem('ct_auto_tr_sub', enabled);
+        this.syncWithCloud();
+    }
+
+    toggleAutoSource(enabled) {
+        this.state.settings.autoSource = enabled;
+        localStorage.setItem('ct_auto_source', enabled);
+        this.syncWithCloud();
     }
 
     toggleLanguage() {
@@ -963,6 +1002,7 @@ class CineTrack {
         this.state.settings.language = newLang;
         localStorage.setItem('ct_lang', newLang);
         this.setLanguageUI();
+        this.syncWithCloud();
 
         // Update stats and grids to refresh labels
         this.renderStats();
@@ -1082,7 +1122,7 @@ class CineTrack {
             type,
             season: startSeason,
             episode: startEpisode,
-            source: localStorage.getItem('ct_default_source') || 'vidcore'
+            source: this.state.settings.autoSource ? 'vidcore' : (localStorage.getItem('ct_default_source') || 'vidcore')
         };
 
         // Switch to watch view
@@ -1335,17 +1375,21 @@ class CineTrack {
             embedUrl = type === 'movie'
                 ? `https://vidfast.pro/movie/${id}`
                 : `https://vidfast.pro/tv/${id}/${s}/${e}`;
+            if (this.state.settings.autoTurkishSub) embedUrl += '?sub_lang=tr';
         } else if (source === 'vidsrc') {
             embedUrl = type === 'movie'
                 ? `https://vidsrc.xyz/embed/movie/${id}`
                 : `https://vidsrc.xyz/embed/tv/${id}/${s}/${e}`;
+            if (this.state.settings.autoTurkishSub) embedUrl += '?sub_lang=tur&ds_lang=tr';
         } else if (source === 'videasy') {
             embedUrl = type === 'movie'
                 ? `https://player.videasy.net/movie/${id}`
                 : `https://player.videasy.net/tv/${id}/${s}/${e}`;
+            if (this.state.settings.autoTurkishSub) embedUrl += '?sub_lang=tr';
         } else if (source === 'vidcore') {
             const theme = '6366f1';
-            const baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true`;
+            let baseParams = `autoPlay=true&title=true&poster=true&theme=${theme}&fullscreenButton=true&chromecast=true`;
+            if (this.state.settings.autoTurkishSub) baseParams += '&sub_lang=tr';
             if (type === 'movie') {
                 embedUrl = `https://vidcore.net/movie/${id}?${baseParams}`;
             } else {
@@ -1353,9 +1397,7 @@ class CineTrack {
             }
         }
 
-        if (iframe.contentWindow) {
-            iframe.contentWindow.location.replace(embedUrl);
-        } else {
+        if (iframe) {
             iframe.src = embedUrl;
         }
     }
@@ -1520,6 +1562,7 @@ class CineTrack {
                         watched: this.state.watched,
                         watchlist: this.state.watchlist,
                         ignored: this.state.ignored,
+                        settings: this.state.settings,
                         lastUpdated: Date.now()
                     }
                 })
