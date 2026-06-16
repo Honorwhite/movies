@@ -40,7 +40,23 @@ const TRANSLATIONS = {
         autoSource: 'Otomatik Kaynak Seçimi',
         autoSourceDesc: 'Her zaman ilk kaynağı öncelikli seçer',
         tvMode: 'TV Modu',
-        tvModeDesc: 'Kumanda ile kullanım için optimize eder'
+        tvModeDesc: 'Kumanda ile kullanım için optimize eder',
+        loginTitle: 'Giriş Yap',
+        signupTitle: 'Kayıt Ol',
+        loginDesc: 'Kaldığınız yerden devam edin.',
+        signupDesc: 'Yeni bir hesap oluşturun.',
+        username: 'Kullanıcı Adı',
+        password: 'Şifre',
+        confirmPassword: 'Şifreyi Onayla',
+        loginBtn: 'Giriş Yap',
+        signupBtn: 'Kayıt Ol',
+        noAccount: 'Hesabınız yok mu? ',
+        hasAccount: 'Zaten hesabınız var mı? ',
+        shortUsername: 'Kullanıcı adı en az 3 karakter olmalıdır.',
+        shortPassword: 'Şifre en az 4 karakter olmalıdır.',
+        passwordMismatch: 'Şifreler eşleşmiyor!',
+        userExists: 'Bu kullanıcı adı zaten alınmış!',
+        invalidCredentials: 'Kullanıcı adı veya şifre hatalı!'
     },
     en: {
         explore: 'Explore',
@@ -83,7 +99,23 @@ const TRANSLATIONS = {
         autoSource: 'Auto Source Selection',
         autoSourceDesc: 'Always prioritizes the first source',
         tvMode: 'TV Mode',
-        tvModeDesc: 'Optimizes for remote control use'
+        tvModeDesc: 'Optimizes for remote control use',
+        loginTitle: 'Log In',
+        signupTitle: 'Sign Up',
+        loginDesc: 'Pick up where you left off.',
+        signupDesc: 'Create a new account.',
+        username: 'Username',
+        password: 'Password',
+        confirmPassword: 'Confirm Password',
+        loginBtn: 'Log In',
+        signupBtn: 'Sign Up',
+        noAccount: "Don't have an account? ",
+        hasAccount: 'Already have an account? ',
+        shortUsername: 'Username must be at least 3 characters.',
+        shortPassword: 'Password must be at least 4 characters.',
+        passwordMismatch: 'Passwords do not match!',
+        userExists: 'This username is already taken!',
+        invalidCredentials: 'Invalid username or password!'
     }
 };
 
@@ -323,7 +355,7 @@ class CineTrack {
         console.log('CineTrack Initializing...');
         this.applySettings();
         this.setupEventListeners();
-        this.checkAuth();
+        await this.checkAuth();
         this.initInfiniteScroll();
         await this.fetchGenres();
         this.renderCatalogs();
@@ -344,44 +376,206 @@ class CineTrack {
     }
 
     // --- Auth & Storage ---
-    checkAuth() {
+    async checkAuth() {
         const savedUser = localStorage.getItem('ct_active_user');
         if (savedUser) {
             this.state.user = savedUser;
+            
+            // Ensure legacy user exists in system_users cloud list
+            const users = await this.getCloudUsers();
+            const userKey = savedUser.toLowerCase();
+            const existingUser = users.find(u => u.username.toLowerCase() === userKey);
+            if (!existingUser) {
+                users.push({
+                    username: savedUser,
+                    password: '1234',
+                    avatar: 'fas fa-user-circle'
+                });
+                await this.saveCloudUsers(users);
+            }
+            
             this.updateProfileUI();
         } else {
             this.showLogin();
         }
     }
 
-    showLogin() {
+    async getCloudUsers() {
+        try {
+            const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/movie_tracker?id=eq.system_users`, {
+                headers: {
+                    'apikey': CONFIG.SUPABASE_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
+                }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.length > 0 && data[0].content && data[0].content.users) {
+                    return data[0].content.users;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch system_users from cloud:', e);
+        }
+        return [];
+    }
+
+    async saveCloudUsers(usersList) {
+        try {
+            await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/movie_tracker`, {
+                method: 'POST',
+                headers: {
+                    'apikey': CONFIG.SUPABASE_KEY,
+                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates'
+                },
+                body: JSON.stringify({
+                    id: 'system_users',
+                    content: {
+                        users: usersList,
+                        lastUpdated: Date.now()
+                    }
+                })
+            });
+        } catch (e) {
+            console.error('Failed to save system_users to cloud:', e);
+        }
+    }
+
+    getUsers() {
+        try {
+            return JSON.parse(localStorage.getItem('ct_users') || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    showLogin(mode = 'login') {
         const authOverlay = document.getElementById('authOverlay');
         const authContainer = document.getElementById('authContainer');
         const lang = this.state.settings.language;
+        const strings = TRANSLATIONS[lang];
         authOverlay.style.display = 'flex';
 
-        const title = lang === 'tr' ? "CineTrack'e Hoş Geldiniz" : "Welcome to CineTrack";
-        const desc = lang === 'tr' ? "Film ve dizilerinizi takip etmeye başlayın." : "Start tracking your movies and shows.";
-        const userP = lang === 'tr' ? "Kullanıcı Adı" : "Username";
-        const passP = lang === 'tr' ? "Şifre" : "Password";
-        const btnText = lang === 'tr' ? "Giriş Yap / Kayıt Ol" : "Login / Sign Up";
+        if (mode === 'login') {
+            authContainer.innerHTML = `
+                <form onsubmit="event.preventDefault(); app.handleAuth('login', event)">
+                    <div class="auth-logo"><i class="fas fa-play"></i></div>
+                    <h2 style="margin-bottom: 0.5rem;">${strings.loginTitle}</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 2rem;">${strings.loginDesc}</p>
+                    <input type="text" id="username" class="input-field" placeholder="${strings.username}" required>
+                    <input type="password" id="password" class="input-field" placeholder="${strings.password}" required>
+                    <button type="submit" class="btn-primary">${strings.loginBtn}</button>
+                    <div class="auth-toggle-link" onclick="app.showLogin('signup')">
+                        ${strings.noAccount}<span>${strings.signupBtn}</span>
+                    </div>
+                </form>
+            `;
+        } else {
+            authContainer.innerHTML = `
+                <form onsubmit="event.preventDefault(); app.handleAuth('signup', event)">
+                    <div class="auth-logo"><i class="fas fa-play"></i></div>
+                    <h2 style="margin-bottom: 0.5rem;">${strings.signupTitle}</h2>
+                    <p style="color: var(--text-muted); margin-bottom: 2rem;">${strings.signupDesc}</p>
+                    <input type="text" id="username" class="input-field" placeholder="${strings.username}" required>
+                    <input type="password" id="password" class="input-field" placeholder="${strings.password}" required>
+                    <input type="password" id="password_confirm" class="input-field" placeholder="${strings.confirmPassword}" required>
+                    <button type="submit" class="btn-primary">${strings.signupBtn}</button>
+                    <div class="auth-toggle-link" onclick="app.showLogin('login')">
+                        ${strings.hasAccount}<span>${strings.loginBtn}</span>
+                    </div>
+                </form>
+            `;
+        }
 
-        authContainer.innerHTML = `
-            <div class="auth-logo"><i class="fas fa-play"></i></div>
-            <h2 style="margin-bottom: 1rem;">${title}</h2>
-            <p style="color: var(--text-muted); margin-bottom: 2rem;">${desc}</p>
-            <input type="text" id="username" class="input-field" placeholder="${userP}">
-            <input type="password" id="password" class="input-field" placeholder="${passP}">
-            <button class="btn-primary" onclick="app.handleAuth()">${btnText}</button>
-        `;
+        if (this.keyboardManager && this.state.settings.tvMode) {
+            this.keyboardManager.focusedIndex = -1;
+            this.keyboardManager.refreshNavigableElements();
+        }
     }
 
-    async handleAuth() {
-        const user = document.getElementById('username').value.trim();
-        if (user.length < 3) return alert('Kullanıcı adı çok kısa');
-
+    async handleAuth(mode = 'login', event = null) {
+        const lang = this.state.settings.language;
+        const strings = TRANSLATIONS[lang];
+        
+        const usernameEl = document.getElementById('username');
+        const passwordEl = document.getElementById('password');
+        
+        if (!usernameEl || !passwordEl) return;
+        
+        const user = usernameEl.value.trim();
+        const password = passwordEl.value;
+        
+        if (user.length < 3) {
+            alert(strings.shortUsername);
+            return;
+        }
+        if (password.length < 4) {
+            alert(strings.shortPassword);
+            return;
+        }
+        
+        // Disable button during network requests
+        const submitBtn = event && event.target ? (event.target.tagName === 'FORM' ? event.target.querySelector('button[type="submit"]') : event.target) : null;
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = lang === 'tr' ? 'Lütfen bekleyin...' : 'Please wait...';
+        }
+        
+        const users = await this.getCloudUsers();
+        const userKey = user.toLowerCase();
+        const existingUser = users.find(u => u.username.toLowerCase() === userKey);
+        
+        if (mode === 'signup') {
+            const passwordConfirmEl = document.getElementById('password_confirm');
+            if (!passwordConfirmEl) {
+                this.resetAuthBtn(event, mode, lang);
+                return;
+            }
+            const passwordConfirm = passwordConfirmEl.value;
+            
+            if (password !== passwordConfirm) {
+                alert(strings.passwordMismatch);
+                this.resetAuthBtn(event, mode, lang);
+                return;
+            }
+            
+            if (existingUser) {
+                alert(strings.userExists);
+                this.resetAuthBtn(event, mode, lang);
+                return;
+            }
+            
+            users.push({
+                username: user,
+                password: password,
+                avatar: 'fas fa-user-circle'
+            });
+            
+            await this.saveCloudUsers(users);
+        } else {
+            if (!existingUser) {
+                alert(strings.invalidCredentials);
+                this.resetAuthBtn(event, mode, lang);
+                return;
+            }
+            
+            if (existingUser.password !== password) {
+                alert(strings.invalidCredentials);
+                this.resetAuthBtn(event, mode, lang);
+                return;
+            }
+        }
+        
         this.state.user = user;
         localStorage.setItem('ct_active_user', user);
+        
+        // Also cache locally
+        const localUsers = this.getUsers();
+        localUsers[userKey] = password;
+        localStorage.setItem('ct_users', JSON.stringify(localUsers));
+        
         document.getElementById('authOverlay').style.display = 'none';
         this.updateProfileUI();
         await this.loadMovieData();
@@ -390,6 +584,18 @@ class CineTrack {
         if (this.state.settings.tvMode && this.keyboardManager) {
             this.keyboardManager.focusedIndex = -1;
             this.keyboardManager.refreshNavigableElements();
+        }
+    }
+
+    resetAuthBtn(event, mode, lang) {
+        const submitBtn = event && event.target ? (event.target.tagName === 'FORM' ? event.target.querySelector('button[type="submit"]') : event.target) : null;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            if (mode === 'signup') {
+                submitBtn.textContent = TRANSLATIONS[lang].signupBtn;
+            } else {
+                submitBtn.textContent = TRANSLATIONS[lang].loginBtn;
+            }
         }
     }
 
@@ -458,15 +664,35 @@ class CineTrack {
         this.renderCatalogs();
     }
 
-    changePassword() {
+    async changePassword() {
         const lang = this.state.settings.language;
         const promptMsg = lang === 'tr' ? 'Yeni şifrenizi girin:' : 'Enter your new password:';
         const successMsg = lang === 'tr' ? 'Şifreniz başarıyla güncellendi!' : 'Password updated successfully!';
+        const shortPassMsg = lang === 'tr' ? 'Şifre en az 4 karakter olmalıdır.' : 'Password must be at least 4 characters.';
 
         const newPass = prompt(promptMsg);
-        if (newPass && newPass.length >= 4) {
-            alert(successMsg);
-            this.syncWithCloud(); // Sync the fact that data updated (though password is local for now)
+        if (!newPass) return;
+        if (newPass.length < 4) {
+            alert(shortPassMsg);
+            return;
+        }
+
+        if (this.state.user) {
+            const users = await this.getCloudUsers();
+            const userKey = this.state.user.toLowerCase();
+            const existingUser = users.find(u => u.username.toLowerCase() === userKey);
+            if (existingUser) {
+                existingUser.password = newPass;
+                await this.saveCloudUsers(users);
+                
+                // Also update local cache
+                const localUsers = this.getUsers();
+                localUsers[userKey] = newPass;
+                localStorage.setItem('ct_users', JSON.stringify(localUsers));
+                
+                alert(successMsg);
+                this.syncWithCloud();
+            }
         }
     }
 
