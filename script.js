@@ -317,6 +317,7 @@ class CineTrack {
             trending: [],
             search: [],
             ignored: [],
+            watchedEpisodes: {},
             recentlyPlayed: [],
             page: 1,
             isSearching: false,
@@ -345,7 +346,11 @@ class CineTrack {
             scrollPositions: {},
             collectionsCache: {},
             colFilter: 'ongoing',
-            currentCatalog: null
+            currentCatalog: null,
+            universeFilter: 'all',
+            universeSearchQuery: '',
+            activeUniverseModalId: null,
+            activeModalTag: 'all'
         };
 
         this.init();
@@ -353,6 +358,8 @@ class CineTrack {
 
     async init() {
         console.log('CineTrack Initializing...');
+        localStorage.removeItem('ct_synced_universe_items');
+        this.checkDisclaimerState();
         this.applySettings();
         this.setupEventListeners();
         await this.checkAuth();
@@ -914,6 +921,9 @@ class CineTrack {
             const card = document.createElement('div');
             card.className = `movie-card ${isAdded ? 'is-added' : ''} ${isUnreleased ? 'is-unreleased' : ''}`;
             card.dataset.id = movie.id;
+            const scoreText = (typeof movie.vote_average === 'number' && movie.vote_average > 0)
+                ? movie.vote_average.toFixed(1)
+                : '—';
             card.innerHTML = `
                 <div class="poster-wrapper">
                     ${badgeHtml}
@@ -921,7 +931,7 @@ class CineTrack {
                     <div class="movie-info">
                         <div class="movie-title">${movie.original_title || movie.original_name || movie.title || movie.name}</div>
                         <div class="movie-meta">
-                            <span class="movie-rating"><i class="fas fa-star"></i> ${movie.vote_average.toFixed(1)}</span>
+                            <span class="movie-rating"><i class="fas fa-star"></i> ${scoreText}</span>
                             <span>${(movie.release_date || movie.first_air_date || '').split('-')[0]}</span>
                         </div>
                         <div class="movie-genres">
@@ -954,19 +964,62 @@ class CineTrack {
 
     renderDetailedStats(listKey, containerId) {
         const list = this.state[listKey];
-        const stats = list.reduce((acc, item) => {
-            const isMovie = item.media_type === 'movie' || item.title;
+        const isWatchlist = listKey === 'watchlist';
+        const isWatched = listKey === 'watched';
+
+        let stats = { movies: 0, tv: 0, episodes: 0, totalMinutes: 0 };
+
+        (list || []).forEach(item => {
+            const isTv = item.media_type === 'tv' || (!item.title && !!item.name) || (Array.isArray(item.seasons) || !!item.number_of_seasons);
+            const isMovie = !isTv;
             if (isMovie) {
-                acc.movies++;
-                acc.totalMinutes += item.runtime || 0;
+                stats.movies++;
+                stats.totalMinutes += item.runtime || 0;
             } else {
-                acc.tv++;
-                acc.episodes += item.number_of_episodes || 0;
-                const runtime = item.episode_run_time ? (item.episode_run_time[0] || 0) : 0;
-                acc.totalMinutes += (item.number_of_episodes || 0) * runtime;
+                stats.tv++;
+                const watchedCount = this.getWatchedEpisodeCount(item.id);
+                const fallbackEps = item.number_of_episodes || (item.seasons ? item.seasons.reduce((acc, s) => acc + (s.season_number > 0 ? (s.episode_count || 0) : 0), 0) : 0);
+                const runtime = (item.episode_run_time && item.episode_run_time[0]) || item.runtime || 45;
+
+                if (isWatchlist) {
+                    // Deduct marked watched episodes from watchlist total
+                    const totalAvailable = fallbackEps > 0 ? fallbackEps : (watchedCount > 0 ? watchedCount : 0);
+                    const remainingEps = Math.max(0, totalAvailable - watchedCount);
+                    stats.episodes += remainingEps;
+                    stats.totalMinutes += remainingEps * runtime;
+                } else if (isWatched) {
+                    // For completed watched list: use tracked episodes, otherwise fallbackEps
+                    const epsCount = watchedCount > 0 ? watchedCount : (fallbackEps > 0 ? fallbackEps : 0);
+                    stats.episodes += epsCount;
+                    stats.totalMinutes += epsCount * runtime;
+
+                    // If watchedCount was 0 (e.g. legacy marked TV show), trigger background batch marking
+                    if (watchedCount === 0 && !this._legacyMarking?.[item.id]) {
+                        if (!this._legacyMarking) this._legacyMarking = {};
+                        this._legacyMarking[item.id] = true;
+                        this.markAllCurrentEpisodesWatched(item.id, item).then(() => {
+                            this.renderStats();
+                        });
+                    }
+                }
             }
-            return acc;
-        }, { movies: 0, tv: 0, episodes: 0, totalMinutes: 0 });
+        });
+
+        // If rendering 'watched' stats, ADD watched episodes from series currently in the watchlist
+        if (isWatched) {
+            (this.state.watchlist || []).forEach(item => {
+                const isTv = item.media_type === 'tv' || (!item.title && !!item.name) || (Array.isArray(item.seasons) || !!item.number_of_seasons);
+                if (isTv) {
+                    const watchedCount = this.getWatchedEpisodeCount(item.id);
+                    if (watchedCount > 0 && !this.isInList('watched', item.id)) {
+                        const runtime = (item.episode_run_time && item.episode_run_time[0]) || item.runtime || 45;
+                        stats.episodes += watchedCount;
+                        stats.totalMinutes += watchedCount * runtime;
+                        stats.tv++;
+                    }
+                }
+            });
+        }
 
         const lang = this.state.settings.language;
         const container = document.getElementById(containerId);
@@ -995,150 +1048,711 @@ class CineTrack {
         }
     }
 
-    switchWatchedTab(tab, btn) {
-        const listGrid = document.getElementById('watchedList');
-        const listActions = document.getElementById('watchedListActions');
-        const collectionsGrid = document.getElementById('watchedCollections');
 
-        // Update active button
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
 
-        if (tab === 'list') {
-            listGrid.style.display = 'grid';
-            listActions.style.display = 'flex';
-            collectionsGrid.style.display = 'none';
-            this.renderGrid(this.state.watched, 'watchedList');
-        } else {
-            listGrid.style.display = 'none';
-            listActions.style.display = 'none';
-            collectionsGrid.style.display = 'block';
-            this.renderCollections();
+    setUniverseFilter(filter, btn) {
+        this.state.universeFilter = filter;
+        document.querySelectorAll('.universe-pills-nav .u-pill').forEach(b => b.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        this.renderUniversesPage(false);
+    }
+
+    handleUniverseSearch(query) {
+        this.state.universeSearchQuery = (query || '').trim().toLowerCase();
+        this.renderUniversesPage(false);
+    }
+
+    async renderUniversesPage(showLoader = true) {
+        const grid = document.getElementById('universesGrid');
+        if (!grid) return;
+
+        if (showLoader && !grid.children.length) {
+            grid.innerHTML = `<div class="loader-spinner center"></div>`;
         }
-    }
 
-    filterCollections(filter, btn) {
-        this.state.colFilter = filter;
-        document.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.renderCollections();
-    }
+        const isTr = this.state.settings.language === 'tr';
 
-    async renderCollections() {
-        const wrapper = document.getElementById('collectionsGridWrapper');
-        if (!wrapper) return;
-
-        wrapper.innerHTML = `<div class="loader-spinner center"></div>`;
-
-        // 1. Proactively fetch details for movies that don't have collection info yet
-        // We use a 'deepScan' flag to avoid re-fetching the same movies every time
-        const moviesToRefresh = this.state.watched.filter(m =>
+        // 1. Proactively deep scan movies in watched list that are missing collection info
+        const moviesToScan = this.state.watched.filter(m =>
             (m.media_type === 'movie' || !m.media_type) &&
             m.belongs_to_collection === undefined &&
             !m._deepScanned
         );
-
-        if (moviesToRefresh.length > 0) {
-            // Processing a larger batch (50) to catch up all missing series at once
-            const batch = moviesToRefresh.slice(0, 50);
+        if (moviesToScan.length > 0) {
+            const batch = moviesToScan.slice(0, 30);
             await Promise.all(batch.map(async (m) => {
                 try {
                     const res = await fetch(`https://api.themoviedb.org/3/movie/${m.id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
                     const details = await res.json();
-
-                    // Update the movie object in state with full details and mark as scanned
-                    const index = this.state.watched.findIndex(w => w.id === m.id);
+                    const index = this.state.watched.findIndex(w => Number(w.id) === Number(m.id));
                     if (index > -1) {
                         this.state.watched[index] = { ...this.state.watched[index], ...details, _deepScanned: true };
                     }
                 } catch (e) {
-                    console.error('Refresh details error:', e);
-                    m._deepScanned = true; // Mark anyway to avoid infinite retry on fail
+                    m._deepScanned = true;
                 }
             }));
-            this.saveMovieData(); // Save the updated details
-
-            // If we processed a batch, re-run identification to update the UI immediately
-            return this.renderCollections();
+            this.saveMovieData();
         }
 
-        // 2. Find all collections from watched movies
-        const collectionIds = [...new Set(this.state.watched
-            .map(m => m.belongs_to_collection ? m.belongs_to_collection.id : null)
-            .filter(Boolean))];
-
-        if (collectionIds.length === 0) {
-            wrapper.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-layer-group"></i>
-                    <p>${this.state.settings.language === 'tr' ? 'Henüz bir koleksiyona ait film izlemediniz.' : 'You haven\'t watched any movies from a collection yet.'}</p>
-                </div>`;
-            return;
-        }
-
-        // 2. Fetch full collection details for all
-        const collectionsData = await Promise.all(collectionIds.map(id => this.fetchCollectionDetails(id)));
-
-        // 3. Filter based on status
-        const today = new Date();
-        const filteredData = collectionsData.filter(collection => {
-            if (!collection) return false;
-
-            // For checking progress, only count released movies as part of the collection
-            const releasedParts = collection.parts.filter(p => p.release_date && new Date(p.release_date) <= today);
-            const watchedInCol = releasedParts.filter(p => this.isInList('watched', p.id));
-
-            const isCompleted = watchedInCol.length === releasedParts.length && releasedParts.length > 0;
-            return this.state.colFilter === 'completed' ? isCompleted : !isCompleted;
+        // 2. Discover collection IDs from watched movies
+        const seenColIds = new Set();
+        const collectionIds = [];
+        this.state.watched.forEach(m => {
+            if (m.belongs_to_collection && m.belongs_to_collection.id && !seenColIds.has(m.belongs_to_collection.id)) {
+                seenColIds.add(m.belongs_to_collection.id);
+                collectionIds.push(m.belongs_to_collection.id);
+            }
         });
 
-        if (filteredData.length === 0) {
-            const msg = this.state.colFilter === 'completed' ?
-                (this.state.settings.language === 'tr' ? 'Henüz hiçbir seriyi tamamlamadınız!' : 'You haven\'t completed any series yet!') :
-                (this.state.settings.language === 'tr' ? 'Tüm serileri tamamladınız, tebrikler!' : 'You completed all series, congrats!');
+        // 3. Fetch full collection details for all discovered collections in parallel
+        if (collectionIds.length > 0) {
+            await Promise.all(collectionIds.map(id => this.fetchCollectionDetails(id)));
+        }
 
-            wrapper.innerHTML = `<div class="empty-state"><i class="fas fa-search"></i><p>${msg}</p></div>`;
+        // 4. Build user franchise objects with actual items from cache
+        const userFranchises = [];
+        const today = new Date();
+        for (const colId of collectionIds) {
+            const colData = this.state.collectionsCache[colId];
+            if (!colData || !colData.parts || colData.parts.length === 0) continue;
+
+            const releasedParts = colData.parts.filter(p => p.release_date && new Date(p.release_date) <= today);
+            const partsToUse = releasedParts.length > 0 ? releasedParts : colData.parts;
+
+            const items = partsToUse.map(p => ({
+                id: p.id,
+                media_type: 'movie',
+                title: p.title || p.original_title,
+                year: (p.release_date || '').substring(0, 4),
+                release_date: p.release_date,
+                score: Math.round((p.vote_average || 0) * 10) / 10,
+                poster_path: p.poster_path,
+                backdrop_path: p.backdrop_path,
+                overview: p.overview || '',
+                tag: isTr ? 'Film' : 'Movie'
+            }));
+
+            userFranchises.push({
+                id: `col-${colId}`,
+                colId: colId,
+                category: 'franchise',
+                name: colData.name,
+                nameEn: colData.name,
+                creator: isTr ? 'Film Serisi' : 'Movie Franchise',
+                tagline: colData.overview || (isTr ? `${colData.name} serisinin tüm yapımları.` : `All titles from ${colData.name}.`),
+                accent: '#3b82f6',
+                icon: 'fa-film',
+                badge: isTr ? 'İzlediğim Seri' : 'Watched Franchise',
+                backdrop: colData.backdrop_path,
+                poster_path: colData.poster_path,
+                items: items,
+                isFranchise: true
+            });
+        }
+
+        // 5. Combine curated universes and user franchises
+        const universes = (window.CURATED_UNIVERSES || []).map(u => ({
+            ...u,
+            items: [...(u.items || [])]
+        }));
+        const combinedUniverses = [...universes, ...userFranchises];
+
+        // 6. Robust watched matching (by ID, Title, and TV episodes)
+        const allWatchedIds = new Set(this.state.watched.map(w => Number(w.id)));
+        const allWatchedTitles = new Set(
+            this.state.watched.map(w => (w.title || w.original_title || w.name || w.original_name || '').trim().toLowerCase()).filter(Boolean)
+        );
+
+        const isItemWatched = (it) => {
+            if (!it) return false;
+            const numId = Number(it.id);
+            if (!isNaN(numId) && allWatchedIds.has(numId)) return true;
+            const t = (it.title || it.name || '').trim().toLowerCase();
+            if (t && allWatchedTitles.has(t)) return true;
+            if ((it.media_type === 'tv' || it.type === 'tv') && this.state.watchedEpisodes && this.state.watchedEpisodes[it.id]) {
+                const eps = Object.values(this.state.watchedEpisodes[it.id]);
+                if (eps.some(Boolean)) return true;
+            }
+            return false;
+        };
+
+        // 7. Overall stats across all universes
+        let totalWatchedProductions = 0;
+        let completedUniversesCount = 0;
+
+        combinedUniverses.forEach(u => {
+            const items = u.items || [];
+            if (items.length > 0) {
+                const watchedInU = items.filter(it => isItemWatched(it));
+                totalWatchedProductions += watchedInU.length;
+                if (watchedInU.length === items.length) {
+                    completedUniversesCount++;
+                }
+            }
+        });
+
+        const statsStrip = document.getElementById('universesStatsStrip');
+        if (statsStrip) {
+            statsStrip.innerHTML = `
+                <div class="u-stat-card">
+                    <div class="u-stat-icon" style="background: rgba(139, 92, 246, 0.2); color: #c4b5fd;">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <div class="u-stat-info">
+                        <span class="u-stat-num">${combinedUniverses.length}</span>
+                        <span class="u-stat-lbl">${isTr ? 'Koleksiyon' : 'Collections'}</span>
+                    </div>
+                </div>
+                <div class="u-stat-card">
+                    <div class="u-stat-icon" style="background: rgba(34, 197, 94, 0.2); color: #4ade80;">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="u-stat-info">
+                        <span class="u-stat-num">${totalWatchedProductions}</span>
+                        <span class="u-stat-lbl">${isTr ? 'İzlenen' : 'Watched'}</span>
+                    </div>
+                </div>
+                <div class="u-stat-card">
+                    <div class="u-stat-icon" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24;">
+                        <i class="fas fa-trophy"></i>
+                    </div>
+                    <div class="u-stat-info">
+                        <span class="u-stat-num">${completedUniversesCount}</span>
+                        <span class="u-stat-lbl">${isTr ? 'Tamamlanan' : 'Completed'}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 8. Apply category filter
+        const catFilter = this.state.universeFilter || 'all';
+        let filtered = combinedUniverses.filter(u => {
+            if (catFilter === 'all') return true;
+            return u.category === catFilter;
+        });
+
+        // 9. Apply search filter
+        const q = this.state.universeSearchQuery;
+        if (q) {
+            filtered = filtered.filter(u => {
+                const name = (u.name || '').toLowerCase();
+                const nameEn = (u.nameEn || '').toLowerCase();
+                const creator = (u.creator || '').toLowerCase();
+                const tagline = (u.tagline || '').toLowerCase();
+                const hasItemMatch = (u.items || []).some(it => (it.title || '').toLowerCase().includes(q));
+                return name.includes(q) || nameEn.includes(q) || creator.includes(q) || tagline.includes(q) || hasItemMatch;
+            });
+        }
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state" style="grid-column: 1 / -1; padding: 4rem 1rem;">
+                    <i class="fas fa-search" style="font-size: 2.5rem; opacity: 0.5; margin-bottom: 1rem;"></i>
+                    <p style="font-size: 1.1rem; color: var(--text-muted);">
+                        ${isTr ? 'Aradığınız kriterlere uygun evren veya koleksiyon bulunamadı.' : 'No universes or collections found matching your search.'}
+                    </p>
+                </div>
+            `;
             return;
         }
 
-        // 4. Render each collection as a compact book card
-        wrapper.innerHTML = filteredData.map(collection => {
-            const today = new Date();
-            // Only show released movies in the sticker book grid
-            const releasedParts = collection.parts.filter(p => p.release_date && new Date(p.release_date) <= today);
-            const total = releasedParts.length;
-            const watchedInCol = releasedParts.filter(p => this.isInList('watched', p.id));
-            const count = watchedInCol.length;
-            const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+        // 10. Render Cards
+        grid.innerHTML = filtered.map(u => {
+            const items = u.items || [];
+            const total = items.length;
+            if (total === 0) return '';
+
+            const watchedItems = items.filter(it => isItemWatched(it));
+            const watchedCount = watchedItems.length;
+            const percent = total > 0 ? Math.round((watchedCount / total) * 100) : 0;
+            const isCompleted = percent === 100 && total > 0;
+
+            const bgImg = u.backdrop ? (CONFIG.BASE_IMG + u.backdrop) : (items[0] && items[0].backdrop_path ? CONFIG.BASE_IMG + items[0].backdrop_path : (u.poster_path ? CONFIG.BASE_IMG + u.poster_path : ''));
+            const accent = u.accent || '#8b5cf6';
+            const icon = u.icon || 'fa-layer-group';
+            const displayName = isTr ? (u.name || u.nameEn) : (u.nameEn || u.name);
+            const displayTagline = isTr ? (u.tagline || u.taglineEn) : (u.taglineEn || u.tagline);
+
+            // Mini posters preview (first 5)
+            const previewItems = items.slice(0, 5);
+            const remainingCount = total - previewItems.length;
 
             return `
-                <div class="collection-book ${percent === 100 ? 'completed' : ''}">
-                    <div class="book-header-compact">
-                        <div class="book-info-top">
-                            <h4>${collection.name}</h4>
-                            <span class="progress-badge">${count} / ${total}</span>
-                        </div>
-                        <div class="progress-bar-thin">
-                            <div class="progress-fill-thin" style="width: ${percent}%"></div>
-                        </div>
-                    </div>
-                    <div class="sticker-grid-compact">
-                        ${releasedParts.map(part => {
-                const isWatched = this.isInList('watched', part.id);
-                return `
-                                <div class="sticker-thumb ${isWatched ? 'is-watched' : 'is-missing'}" 
-                                     onclick="app.playMovie(${part.id}, 'movie')" title="${part.title}">
-                                    <div class="thumb-poster">
-                                        <img src="${CONFIG.BASE_IMG + part.poster_path}" alt="${part.title}" loading="lazy">
-                                        ${isWatched ? '<i class="fas fa-check sticker-marker"></i>' : ''}
-                                    </div>
+                <div class="universe-card" 
+                     style="--u-accent: ${accent}; --u-accent-glow: ${accent}44;" 
+                     onclick="app.openUniverseModal('${u.id}')">
+                    <div class="u-card-backdrop" style="background-image: url('${bgImg}')"></div>
+                    <div class="u-card-overlay"></div>
+                    
+                    <div class="u-card-content">
+                        <div>
+                            <div class="u-card-top">
+                                <span class="u-badge">
+                                    <i class="fas ${icon}"></i> ${u.badge || (u.category === 'director' ? 'Yönetmen' : 'Evren')}
+                                </span>
+                                ${isCompleted ? `
+                                    <span class="u-trophy-badge">
+                                        <i class="fas fa-trophy"></i> ${isTr ? 'Tamamlandı' : 'Completed'}
+                                    </span>
+                                ` : ''}
+                            </div>
+
+                            <div class="u-card-middle">
+                                <h3 class="u-card-title">${displayName}</h3>
+                                <div class="u-card-creator">
+                                    <i class="fas fa-user-pen" style="font-size: 0.75rem;"></i> ${u.creator || ''}
                                 </div>
-                            `;
-            }).join('')}
+                                <p class="u-card-tagline">${displayTagline || ''}</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="u-card-progress-box">
+                                <div class="u-progress-header">
+                                    <span class="u-progress-count">${watchedCount} / ${total} ${isTr ? 'İzlendi' : 'Watched'}</span>
+                                    <span class="u-progress-percent">%${percent}</span>
+                                </div>
+                                <div class="u-progress-bar-bg">
+                                    <div class="u-progress-bar-fill" style="width: ${percent}%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="u-posters-strip">
+                                ${previewItems.map(item => {
+                                    const isW = isItemWatched(item);
+                                    const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
+                                    return `
+                                        <div class="u-mini-poster ${isW ? 'watched' : ''}" title="${item.title}">
+                                            ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" loading="lazy">` : ''}
+                                        </div>
+                                    `;
+                                }).join('')}
+                                ${remainingCount > 0 ? `
+                                    <div class="u-posters-more">+${remainingCount}</div>
+                                ` : ''}
+                            </div>
+
+                            <div class="u-card-bottom">
+                                <span class="u-explore-btn">
+                                    ${isTr ? 'Koleksiyonu İncele' : 'Explore Collection'} <i class="fas fa-arrow-right"></i>
+                                </span>
+                                <span class="u-total-count-tag">
+                                    ${total} ${isTr ? 'Yapım' : 'Titles'}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
+    }
+
+    async openUniverseModal(universeId) {
+        const modal = document.getElementById('universeDetailModal');
+        const content = document.getElementById('universeModalContent');
+        if (!modal || !content) return;
+
+        const isTr = this.state.settings.language === 'tr';
+        this.state.activeUniverseModalId = universeId;
+        this.state.activeModalTag = 'all';
+
+        // 1. Find the universe
+        let universe = (window.CURATED_UNIVERSES || []).find(u => u.id === universeId);
+
+        // If not found in curated, check dynamic franchises
+        if (!universe && universeId.startsWith('col-')) {
+            const colId = parseInt(universeId.replace('col-', ''));
+            const colData = await this.fetchCollectionDetails(colId);
+            if (colData) {
+                const today = new Date();
+                const releasedParts = (colData.parts || []).filter(p => p.release_date && new Date(p.release_date) <= today);
+                const partsToUse = releasedParts.length > 0 ? releasedParts : (colData.parts || []);
+
+                universe = {
+                    id: universeId,
+                    colId: colId,
+                    category: 'franchise',
+                    name: colData.name,
+                    nameEn: colData.name,
+                    creator: isTr ? 'Film Serisi' : 'Movie Franchise',
+                    tagline: colData.overview || (isTr ? `${colData.name} serisinin tüm yapımları.` : `All titles in ${colData.name}.`),
+                    accent: '#3b82f6',
+                    icon: 'fa-film',
+                    badge: isTr ? 'Film Serisi' : 'Movie Franchise',
+                    backdrop: colData.backdrop_path,
+                    items: partsToUse.map(p => ({
+                        id: p.id,
+                        media_type: 'movie',
+                        title: p.title,
+                        year: (p.release_date || '').substring(0, 4),
+                        release_date: p.release_date,
+                        score: Math.round((p.vote_average || 0) * 10) / 10,
+                        poster_path: p.poster_path,
+                        backdrop_path: p.backdrop_path,
+                        overview: p.overview,
+                        tag: isTr ? 'Film' : 'Movie'
+                    }))
+                };
+            }
+        }
+
+        if (!universe) return;
+
+        this.currentModalUniverse = universe;
+        this.renderModalContent();
+
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    renderModalContent() {
+        const content = document.getElementById('universeModalContent');
+        if (!content || !this.currentModalUniverse) return;
+
+        const universe = this.currentModalUniverse;
+        const isTr = this.state.settings.language === 'tr';
+        const allWatchedIds = new Set(this.state.watched.map(w => Number(w.id)));
+        const allWatchedTitles = new Set(
+            this.state.watched.map(w => (w.title || w.original_title || w.name || w.original_name || '').trim().toLowerCase()).filter(Boolean)
+        );
+        const allWatchlistIds = new Set(this.state.watchlist.map(w => Number(w.id)));
+        const allWatchlistTitles = new Set(
+            this.state.watchlist.map(w => (w.title || w.original_title || w.name || w.original_name || '').trim().toLowerCase()).filter(Boolean)
+        );
+
+        const isItemWatched = (it) => {
+            if (!it) return false;
+            const numId = Number(it.id);
+            if (!isNaN(numId) && allWatchedIds.has(numId)) return true;
+            const t = (it.title || it.name || '').trim().toLowerCase();
+            if (t && allWatchedTitles.has(t)) return true;
+            if ((it.media_type === 'tv' || it.type === 'tv') && this.state.watchedEpisodes && this.state.watchedEpisodes[it.id]) {
+                const eps = Object.values(this.state.watchedEpisodes[it.id]);
+                if (eps.some(Boolean)) return true;
+            }
+            return false;
+        };
+
+        const isItemWatchlist = (it) => {
+            if (!it) return false;
+            const numId = Number(it.id);
+            if (!isNaN(numId) && allWatchlistIds.has(numId)) return true;
+            const t = (it.title || it.name || '').trim().toLowerCase();
+            return !!(t && allWatchlistTitles.has(t));
+        };
+
+        const items = universe.items || [];
+        const total = items.length;
+        const watchedCount = items.filter(it => isItemWatched(it)).length;
+        const unwatchedNotWatchlist = items.filter(it => !isItemWatched(it) && !isItemWatchlist(it));
+        const unwatchedNotWatchlistCount = unwatchedNotWatchlist.length;
+        const missingCount = total - watchedCount;
+        const percent = total > 0 ? Math.round((watchedCount / total) * 100) : 0;
+
+        const bgImg = universe.backdrop ? (CONFIG.BASE_IMG + universe.backdrop) : '';
+        const accent = universe.accent || '#8b5cf6';
+        const displayName = isTr ? (universe.name || universe.nameEn) : (universe.nameEn || universe.name);
+        const displayTagline = isTr ? (universe.tagline || universe.taglineEn) : (universe.taglineEn || universe.tagline);
+
+        // Tags for filtering inside the modal
+        const distinctTags = [...new Set(items.map(it => it.tag).filter(Boolean))];
+
+        // Filter modal items based on activeModalTag
+        const currentTag = this.state.activeModalTag || 'all';
+        let displayedItems = items;
+        if (currentTag === 'watched') {
+            displayedItems = items.filter(it => isItemWatched(it));
+        } else if (currentTag === 'unwatched') {
+            displayedItems = items.filter(it => !isItemWatched(it));
+        } else if (currentTag !== 'all') {
+            displayedItems = items.filter(it => it.tag === currentTag);
+        }
+
+        content.innerHTML = `
+            <div class="u-modal-hero" style="--modal-accent: ${accent}; --modal-accent-glow: ${accent}44;">
+                <div class="u-modal-hero-bg" style="background-image: url('${bgImg}')"></div>
+                <div class="u-modal-hero-gradient"></div>
+
+                <div class="u-modal-hero-content">
+                    <span class="u-badge" style="margin-bottom: 0.8rem;">
+                        <i class="fas ${universe.icon || 'fa-layer-group'}"></i> ${universe.badge || ''}
+                    </span>
+                    <h2 class="u-modal-title">${displayName}</h2>
+                    <div class="u-modal-subtitle">
+                        <i class="fas fa-user-pen"></i> ${universe.creator || ''}
+                    </div>
+                    <p class="u-modal-desc">${displayTagline || ''}</p>
+
+                    <div class="u-modal-hero-bar">
+                        <div class="u-modal-progress-strip">
+                            <div>
+                                <div style="font-size: 0.8rem; font-weight: 700; color: #fff; margin-bottom: 3px;">
+                                    ${watchedCount} / ${total} ${isTr ? 'İzlendi' : 'Watched'} (%${percent})
+                                </div>
+                                <div class="u-progress-bar-bg" style="width: 140px; height: 6px;">
+                                    <div class="u-progress-bar-fill" style="width: ${percent}%;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="u-modal-actions">
+                            ${watchedCount === total && total > 0 ? `
+                                <div class="u-trophy-badge" style="padding: 0.65rem 1.3rem; font-size: 0.85rem;">
+                                    <i class="fas fa-trophy"></i> <span>${isTr ? 'Tüm Seri Tamamlandı! 🏆' : 'Entire Series Completed! 🏆'}</span>
+                                </div>
+                            ` : unwatchedNotWatchlistCount > 0 ? `
+                                <button id="addMissingWatchlistBtn" class="u-action-btn u-action-btn-primary" 
+                                        onclick="app.addMissingUniverseToWatchlist('${universe.id}')">
+                                    <i class="fas fa-plus-circle"></i> 
+                                    <span>${isTr ? `Eksikleri İzleneceklere Ekle (${unwatchedNotWatchlistCount})` : `Add Missing to Watchlist (${unwatchedNotWatchlistCount})`}</span>
+                                </button>
+                            ` : `
+                                <div class="u-action-btn is-done">
+                                    <i class="fas fa-check-double"></i> 
+                                    <span>${isTr ? 'Tüm Eksikler İzleneceklerde ✓' : 'All Missing in Watchlist ✓'}</span>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="u-modal-body" style="--modal-accent: ${accent}; --modal-accent-glow: ${accent}44;">
+                <div class="u-modal-controls">
+                    <div class="u-modal-filter-pills">
+                        <button class="u-m-pill ${currentTag === 'all' ? 'active' : ''}" 
+                                onclick="app.setModalTagFilter('all')">
+                            ${isTr ? 'Tümü' : 'All'} (${total})
+                        </button>
+                        <button class="u-m-pill ${currentTag === 'unwatched' ? 'active' : ''}" 
+                                onclick="app.setModalTagFilter('unwatched')">
+                            ${isTr ? 'İzlenmeyenler' : 'Unwatched'} (${missingCount})
+                        </button>
+                        <button class="u-m-pill ${currentTag === 'watched' ? 'active' : ''}" 
+                                onclick="app.setModalTagFilter('watched')">
+                            ${isTr ? 'İzlenenler' : 'Watched'} (${watchedCount})
+                        </button>
+                        ${distinctTags.map(tag => `
+                            <button class="u-m-pill ${currentTag === tag ? 'active' : ''}" 
+                                    onclick="app.setModalTagFilter('${tag}')">
+                                ${tag}
+                            </button>
+                        `).join('')}
+                    </div>
+
+                    <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">
+                        ${displayedItems.length} ${isTr ? 'Yapım Gösteriliyor' : 'Titles Shown'}
+                    </div>
+                </div>
+
+                <div class="u-modal-items-grid">
+                    ${displayedItems.map(item => {
+                        const isWatched = isItemWatched(item);
+                        const inWatchlist = isItemWatchlist(item);
+                        const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
+                        const mType = item.media_type || item.type || 'movie';
+
+                        return `
+                            <div class="u-item-card">
+                                <div class="u-item-poster-wrap">
+                                    ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" loading="lazy">` : ''}
+                                    ${isWatched ? `
+                                        <div class="u-item-watched-badge">
+                                            <i class="fas fa-check"></i> ${isTr ? 'İzlendi' : 'Watched'}
+                                        </div>
+                                    ` : ''}
+                                    ${item.tag ? `
+                                        <div class="u-item-tag-badge">${item.tag}</div>
+                                    ` : ''}
+
+                                    <div class="u-item-overlay-actions">
+                                        <button class="u-play-action-btn" 
+                                                onclick="app.playFromUniverseModal(${item.id}, '${mType}')" 
+                                                title="${isTr ? 'İzle' : 'Play'}">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        <button class="u-watchlist-action-btn" 
+                                                onclick="app.toggleUniverseWatchlist(event, ${item.id}, '${mType}')">
+                                            <i class="fas ${inWatchlist ? 'fa-check' : 'fa-bookmark'}"></i> 
+                                            ${inWatchlist ? (isTr ? 'Listede' : 'Saved') : (isTr ? 'İzlenecek' : 'Watchlist')}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="u-item-details">
+                                    <div class="u-item-title" title="${item.title}">${item.title}</div>
+                                    <div class="u-item-meta">
+                                        <span>${item.year || ''}</span>
+                                        ${item.score ? `
+                                            <span class="u-item-score">
+                                                <i class="fas fa-star"></i> ${item.score}
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    setModalTagFilter(tag) {
+        this.state.activeModalTag = tag;
+        this.renderModalContent();
+    }
+
+    playFromUniverseModal(id, type) {
+        this.closeUniverseModal();
+        this.playMovie(id, type);
+    }
+
+    async toggleUniverseWatchlist(e, id, type) {
+        e.stopPropagation();
+        await this.toggleList('watchlist', id, type);
+        this.renderModalContent();
+    }
+
+    showToast(msg, icon = 'fa-check-circle') {
+        let toast = document.getElementById('appToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'appToast';
+            toast.className = 'app-toast';
+            document.body.appendChild(toast);
+        }
+        toast.innerHTML = `<i class="fas ${icon}"></i> <span>${msg}</span>`;
+        toast.classList.add('show');
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3200);
+    }
+
+    async addMissingUniverseToWatchlist(universeId) {
+        if (!this.currentModalUniverse) return;
+        const universe = this.currentModalUniverse;
+        const items = universe.items || [];
+        const isTr = this.state.settings.language === 'tr';
+
+        const allWatchedIds = new Set(this.state.watched.map(w => Number(w.id)));
+        const allWatchedTitles = new Set(
+            this.state.watched.map(w => (w.title || w.original_title || w.name || w.original_name || '').trim().toLowerCase()).filter(Boolean)
+        );
+        const allWatchlistIds = new Set(this.state.watchlist.map(w => Number(w.id)));
+        const allWatchlistTitles = new Set(
+            this.state.watchlist.map(w => (w.title || w.original_title || w.name || w.original_name || '').trim().toLowerCase()).filter(Boolean)
+        );
+
+        const isItemWatched = (it) => {
+            if (!it) return false;
+            const numId = Number(it.id);
+            if (!isNaN(numId) && allWatchedIds.has(numId)) return true;
+            const t = (it.title || it.name || '').trim().toLowerCase();
+            if (t && allWatchedTitles.has(t)) return true;
+            if ((it.media_type === 'tv' || it.type === 'tv') && this.state.watchedEpisodes && this.state.watchedEpisodes[it.id]) {
+                const eps = Object.values(this.state.watchedEpisodes[it.id]);
+                if (eps.some(Boolean)) return true;
+            }
+            return false;
+        };
+
+        const isItemWatchlist = (it) => {
+            if (!it) return false;
+            const numId = Number(it.id);
+            if (!isNaN(numId) && allWatchlistIds.has(numId)) return true;
+            const t = (it.title || it.name || '').trim().toLowerCase();
+            return !!(t && allWatchlistTitles.has(t));
+        };
+
+        const missing = items.filter(it => !isItemWatched(it) && !isItemWatchlist(it));
+        const btn = document.getElementById('addMissingWatchlistBtn');
+
+        if (missing.length === 0) {
+            if (btn) {
+                btn.className = 'u-action-btn is-done';
+                btn.innerHTML = `<i class="fas fa-check-double"></i> <span>${isTr ? 'Tüm Eksikler Zaten Listede!' : 'All Missing Already in Watchlist!'}</span>`;
+            }
+            return;
+        }
+
+        // 1. Immediate visual response: animated loading state
+        if (btn) {
+            btn.classList.add('is-loading');
+            btn.style.pointerEvents = 'none';
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span>${isTr ? 'İzleneceklere Ekleniyor...' : 'Adding to Watchlist...'}</span>`;
+        }
+
+        // Slight deliberate delay (320ms) so user distinctly sees and feels the action
+        await new Promise(r => setTimeout(r, 320));
+
+        // 2. Add missing items to watchlist & persist
+        const missingIdsSet = new Set(missing.map(m => Number(m.id)));
+        for (const it of missing) {
+            this.state.watchlist.push({
+                id: it.id,
+                title: it.title || it.name,
+                name: it.name || it.title,
+                media_type: it.media_type || it.type || 'movie',
+                poster_path: it.poster_path,
+                backdrop_path: it.backdrop_path,
+                release_date: it.release_date || '',
+                vote_average: it.score || it.vote_average || 0
+            });
+        }
+
+        this.saveMovieData();
+
+        // 3. Immediately update and highlight the cards inside the modal grid
+        const grid = document.querySelector('#universeModalContent .u-modal-items-grid');
+        if (grid) {
+            const cards = grid.querySelectorAll('.u-item-card');
+            cards.forEach(card => {
+                const watchlistBtn = card.querySelector('.u-watchlist-action-btn');
+                if (watchlistBtn) {
+                    const onclickAttr = watchlistBtn.getAttribute('onclick') || '';
+                    const match = onclickAttr.match(/toggleUniverseWatchlist\(event,\s*(\d+)/);
+                    if (match && missingIdsSet.has(Number(match[1]))) {
+                        card.classList.add('just-added');
+                        watchlistBtn.innerHTML = `<i class="fas fa-check"></i> ${isTr ? 'Listede' : 'Saved'}`;
+                        watchlistBtn.classList.add('active');
+                    }
+                }
+            });
+        }
+
+        // 4. Update button to celebration Success State with glowing bounce
+        if (btn) {
+            btn.classList.remove('is-loading');
+            btn.classList.add('is-success');
+            btn.innerHTML = `<i class="fas fa-check-circle" style="font-size: 1.1rem;"></i> <span>${isTr ? `${missing.length} Yapım Eklendi! ✓` : `${missing.length} Titles Added! ✓`}</span>`;
+        }
+
+        // 5. Toast notification
+        this.showToast(
+            isTr ? `🎉 ${missing.length} yeni yapım başarıyla İzlenecekler listenize eklendi!` : `🎉 ${missing.length} titles added to Watchlist!`,
+            'fa-check-circle'
+        );
+
+        // 6. After 1.6s, smoothly transform button into final completed status badge
+        setTimeout(() => {
+            if (btn && btn.parentElement) {
+                btn.className = 'u-action-btn is-done';
+                btn.style.pointerEvents = 'default';
+                btn.onclick = null;
+                btn.innerHTML = `<i class="fas fa-check-double"></i> <span>${isTr ? 'Tüm Eksikler İzleneceklerde ✓' : 'All Missing in Watchlist ✓'}</span>`;
+            }
+            this.renderUniversesPage(false);
+        }, 1600);
+    }
+
+    closeUniverseModal() {
+        const modal = document.getElementById('universeDetailModal');
+        if (modal) modal.style.display = 'none';
+        document.body.style.overflow = '';
+        this.state.activeUniverseModalId = null;
     }
 
     async fetchCollectionDetails(id) {
@@ -1172,13 +1786,24 @@ class CineTrack {
         const index = list.findIndex(item => item.id === id);
 
         if (index > -1) {
+            const removedItem = list[index];
             list.splice(index, 1);
+            // If removed from watched and it's a TV show, clear marked episodes
+            const isTv = mediaType === 'tv' || (!removedItem?.title && !!removedItem?.name);
+            if (listType === 'watched' && isTv) {
+                this.unmarkAllEpisodesWatched(id);
+            }
         } else {
             // Fetch basic details to save
             const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
             const movie = await res.json();
             movie.media_type = mediaType;
             list.push(movie);
+
+            // If a TV show's main title is marked as watched, automatically mark all currently released episodes as watched!
+            if (listType === 'watched' && mediaType === 'tv') {
+                await this.markAllCurrentEpisodesWatched(id, movie);
+            }
         }
 
         this.saveMovieData();
@@ -1233,13 +1858,33 @@ class CineTrack {
         this.state.watchlist = this.state.watchlist.filter(m => m.id !== id);
         // Add to watched if not exists
         if (!this.isInList('watched', id)) {
+            let targetMovie = movie;
             if (movie) {
-                this.state.watched.push(movie);
+                // If the movie had a 0 rating or missing rating or missing episodes, fetch fresh details upon moving
+                if (!movie.vote_average || movie.vote_average === 0 || (mediaType === 'tv' && !movie.number_of_episodes)) {
+                    try {
+                        const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+                        if (res.ok) {
+                            const fresh = await res.json();
+                            fresh.media_type = mediaType;
+                            targetMovie = fresh;
+                        }
+                    } catch (e) {
+                        console.warn('Error fetching details in moveToWatched:', e);
+                    }
+                }
+                this.state.watched.push(targetMovie);
             } else {
                 const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
                 const data = await res.json();
                 data.media_type = mediaType;
+                targetMovie = data;
                 this.state.watched.push(data);
+            }
+
+            // If it's a TV show, automatically mark all currently released episodes as watched
+            if (mediaType === 'tv') {
+                await this.markAllCurrentEpisodesWatched(id, targetMovie);
             }
         }
 
@@ -1249,7 +1894,9 @@ class CineTrack {
     }
 
     isInList(listType, id) {
-        return this.state[listType].some(item => item.id === id);
+        if (!this.state[listType]) return false;
+        const numId = Number(id);
+        return this.state[listType].some(item => Number(item.id) === numId || item.id == id);
     }
 
     saveMovieData() {
@@ -1257,6 +1904,320 @@ class CineTrack {
         localStorage.setItem(`ct_${this.state.user}_watchlist`, JSON.stringify(this.state.watchlist));
         localStorage.setItem(`ct_${this.state.user}_ignored`, JSON.stringify(this.state.ignored));
         this.syncWithCloud();
+    }
+
+    async refreshZeroRatings(targetListKey = null) {
+        if (this._isRefreshingRatings) return;
+        this._isRefreshingRatings = true;
+
+        try {
+            const listsToScan = targetListKey ? [targetListKey] : ['watchlist', 'watched'];
+            let anyUpdated = false;
+            const now = Date.now();
+
+            for (const listKey of listsToScan) {
+                const list = this.state[listKey];
+                if (!list || !Array.isArray(list)) continue;
+
+                // Find items that have vote_average === 0, null, or undefined
+                const candidates = list.filter(m => {
+                    const score = typeof m.vote_average === 'number' ? m.vote_average : 0;
+                    if (score > 0) return false;
+                    // Check once every 4 hours max to preserve network bandwidth
+                    if (m._lastRatingChecked && (now - m._lastRatingChecked < 4 * 3600 * 1000)) return false;
+                    return true;
+                });
+
+                if (candidates.length === 0) continue;
+
+                // Batch in groups of 5
+                const chunkSize = 5;
+                for (let i = 0; i < candidates.length; i += chunkSize) {
+                    const chunk = candidates.slice(i, i + chunkSize);
+                    await Promise.all(chunk.map(async (movie) => {
+                        movie._lastRatingChecked = Date.now();
+                        try {
+                            const mType = movie.media_type || (movie.title ? 'movie' : 'tv');
+                            const res = await fetch(`https://api.themoviedb.org/3/${mType}/${movie.id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+                            if (!res.ok) return;
+
+                            const data = await res.json();
+                            let itemUpdated = false;
+
+                            if (typeof data.vote_average === 'number' && data.vote_average > 0) {
+                                movie.vote_average = data.vote_average;
+                                movie.vote_count = data.vote_count || movie.vote_count;
+                                itemUpdated = true;
+                            }
+                            if (data.release_date && data.release_date !== movie.release_date) {
+                                movie.release_date = data.release_date;
+                                itemUpdated = true;
+                            }
+                            if (data.first_air_date && data.first_air_date !== movie.first_air_date) {
+                                movie.first_air_date = data.first_air_date;
+                                itemUpdated = true;
+                            }
+                            if (data.status && data.status !== movie.status) {
+                                movie.status = data.status;
+                                itemUpdated = true;
+                            }
+                            if (data.runtime && !movie.runtime) {
+                                movie.runtime = data.runtime;
+                                itemUpdated = true;
+                            }
+
+                            if (itemUpdated) {
+                                anyUpdated = true;
+                                // Dynamically update card on screen if currently rendered
+                                const card = document.querySelector(`.movie-card[data-id="${movie.id}"]`);
+                                if (card) {
+                                    const ratingEl = card.querySelector('.movie-rating');
+                                    if (ratingEl && movie.vote_average > 0) {
+                                        ratingEl.innerHTML = `<i class="fas fa-star"></i> ${movie.vote_average.toFixed(1)}`;
+                                    }
+                                    const releaseDate = movie.release_date || movie.first_air_date;
+                                    const isUnreleased = releaseDate && new Date(releaseDate) > new Date();
+                                    if (!isUnreleased) {
+                                        card.classList.remove('is-unreleased');
+                                        const badge = card.querySelector('.movie-badge');
+                                        if (badge) badge.remove();
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.warn(`Error refreshing rating for ID ${movie.id}:`, err);
+                        }
+                    }));
+                }
+            }
+
+            if (anyUpdated) {
+                this.saveMovieData();
+                this.renderStats();
+                // If user sorted the active view by score, refresh grid ordering
+                if (this.state.currentView === 'watchlist' && this.state.sortStates?.watchlist?.field === 'vote_average') {
+                    this.sortList('watchlist', 'vote_average', 'watchlist');
+                } else if (this.state.currentView === 'watched' && this.state.sortStates?.watched?.field === 'vote_average') {
+                    this.sortList('watched', 'vote_average', 'watchedList');
+                }
+            }
+        } finally {
+            this._isRefreshingRatings = false;
+        }
+    }
+
+    isEpisodeWatched(showId, season, episode) {
+        if (!this.state.watchedEpisodes) return false;
+        const showRecord = this.state.watchedEpisodes[showId];
+        if (!showRecord || !Array.isArray(showRecord.episodes)) return false;
+        return showRecord.episodes.includes(`${season}_${episode}`);
+    }
+
+    getWatchedEpisodeCount(showId) {
+        if (!this.state.watchedEpisodes) return 0;
+        const showRecord = this.state.watchedEpisodes[showId];
+        if (!showRecord || !Array.isArray(showRecord.episodes)) return 0;
+        return showRecord.episodes.length;
+    }
+
+    computeLastWatchedEpisode(episodesArray) {
+        if (!episodesArray || episodesArray.length === 0) return null;
+        let maxSeason = 0;
+        let maxEpisode = 0;
+        for (const key of episodesArray) {
+            const [s, e] = key.split('_').map(Number);
+            if (s > maxSeason || (s === maxSeason && e > maxEpisode)) {
+                maxSeason = s;
+                maxEpisode = e;
+            }
+        }
+        return maxSeason > 0 ? { season: maxSeason, episode: maxEpisode, timestamp: Date.now() } : null;
+    }
+
+    toggleEpisodeWatched(showId, season, episode, btnEl) {
+        if (!this.state.watchedEpisodes) this.state.watchedEpisodes = {};
+        if (!this.state.watchedEpisodes[showId]) {
+            this.state.watchedEpisodes[showId] = { episodes: [], lastWatched: null };
+        }
+
+        const showRecord = this.state.watchedEpisodes[showId];
+        if (!Array.isArray(showRecord.episodes)) showRecord.episodes = [];
+        const epKey = `${season}_${episode}`;
+        const idx = showRecord.episodes.indexOf(epKey);
+        let isNowWatched = false;
+
+        if (idx > -1) {
+            // Uncheck episode
+            showRecord.episodes.splice(idx, 1);
+            isNowWatched = false;
+            showRecord.lastWatched = this.computeLastWatchedEpisode(showRecord.episodes);
+        } else {
+            // Check episode as watched
+            showRecord.episodes.push(epKey);
+            isNowWatched = true;
+            showRecord.lastWatched = { season: Number(season), episode: Number(episode), timestamp: Date.now() };
+        }
+
+        // Update UI of the row immediately
+        if (btnEl) {
+            const row = btnEl.closest('.ep-row');
+            if (row) row.classList.toggle('is-watched', isNowWatched);
+            btnEl.classList.toggle('watched', isNowWatched);
+            const icon = btnEl.querySelector('i');
+            if (icon) {
+                icon.className = isNowWatched ? 'fas fa-check-circle' : 'fas fa-check';
+            }
+            const lang = this.state.settings.language;
+            btnEl.title = isNowWatched 
+                ? (lang === 'tr' ? 'İzlendi (Geri al)' : 'Watched (Undo)')
+                : (lang === 'tr' ? 'İzlendi olarak işaretle' : 'Mark as watched');
+
+            const epBtn = row?.querySelector('.ep-btn');
+            if (epBtn) {
+                let tag = epBtn.querySelector('.ep-watched-tag');
+                if (isNowWatched && !tag) {
+                    tag = document.createElement('span');
+                    tag.className = 'ep-watched-tag';
+                    tag.innerHTML = '<i class="fas fa-check"></i>';
+                    epBtn.appendChild(tag);
+                } else if (!isNowWatched && tag) {
+                    tag.remove();
+                }
+            }
+        }
+
+        this.saveWatchedEpisodes();
+        this.renderStats();
+    }
+
+    saveWatchedEpisodes() {
+        if (!this.state.user) return;
+        localStorage.setItem(`ct_${this.state.user}_watchedEpisodes`, JSON.stringify(this.state.watchedEpisodes));
+        this.syncWithCloud();
+    }
+
+    async markAllCurrentEpisodesWatched(showId, tvData = null) {
+        let data = tvData;
+        if (!data || !data.seasons || !Array.isArray(data.seasons) || !data.seasons.length) {
+            try {
+                const res = await fetch(`https://api.themoviedb.org/3/tv/${showId}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+                if (res.ok) {
+                    data = await res.json();
+                }
+            } catch (e) {
+                console.error('Failed to fetch TV details for episode marking:', e);
+            }
+        }
+
+        if (!data) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const validSeasons = (data.seasons || []).filter(s => s.season_number > 0);
+        const watchedEps = [];
+
+        let lastSeasonNum = 1;
+        let lastEpNum = 1;
+
+        if (data.last_episode_to_air) {
+            lastSeasonNum = Number(data.last_episode_to_air.season_number);
+            lastEpNum = Number(data.last_episode_to_air.episode_number);
+
+            validSeasons.forEach(s => {
+                const sNum = Number(s.season_number);
+                const epCount = Number(s.episode_count) || 0;
+
+                if (sNum < lastSeasonNum) {
+                    // Bu sezonun tüm bölümleri çıkmıştır
+                    for (let ep = 1; ep <= epCount; ep++) {
+                        watchedEps.push(`${sNum}_${ep}`);
+                    }
+                } else if (sNum === lastSeasonNum) {
+                    // Bu sezonda sadece çıkmış olan son bölüme kadar ekle
+                    for (let ep = 1; ep <= Math.min(lastEpNum, epCount); ep++) {
+                        watchedEps.push(`${sNum}_${ep}`);
+                    }
+                }
+                // sNum > lastSeasonNum ise henüz çıkmamış bölümlerdir, eklenmez!
+            });
+        } else {
+            // last_episode_to_air yoksa air_date kontrolü yap
+            validSeasons.forEach(s => {
+                const sNum = Number(s.season_number);
+                const epCount = Number(s.episode_count) || 0;
+                if (!s.air_date || s.air_date <= today || data.status === 'Ended' || data.status === 'Canceled') {
+                    for (let ep = 1; ep <= epCount; ep++) {
+                        watchedEps.push(`${sNum}_${ep}`);
+                    }
+                    lastSeasonNum = sNum;
+                    lastEpNum = epCount;
+                }
+            });
+        }
+
+        if (!this.state.watchedEpisodes) this.state.watchedEpisodes = {};
+        this.state.watchedEpisodes[showId] = {
+            episodes: watchedEps,
+            lastWatched: {
+                season: lastSeasonNum,
+                episode: lastEpNum,
+                timestamp: Date.now()
+            },
+            markedAt: Date.now()
+        };
+
+        this.saveWatchedEpisodes();
+
+        // Eğer izleme sayfasında bu dizi açıksa DOM'daki bölüm tiklerini hemen güncelle
+        if (this.state.currentView === 'watch' && this.state.player.id === showId) {
+            document.querySelectorAll('#episodeGrid .ep-row').forEach(row => {
+                const checkBtn = row.querySelector('.ep-watched-check');
+                const epBtn = row.querySelector('.ep-btn');
+                const epNum = epBtn?.querySelector('.ep-num')?.textContent?.trim();
+                const season = this.state.player.season;
+                const isEpWatched = watchedEps.includes(`${season}_${epNum}`);
+
+                row.classList.toggle('is-watched', isEpWatched);
+                if (checkBtn) {
+                    checkBtn.classList.toggle('watched', isEpWatched);
+                    const icon = checkBtn.querySelector('i');
+                    if (icon) icon.className = isEpWatched ? 'fas fa-check-circle' : 'fas fa-check';
+                }
+                if (epBtn) {
+                    let tag = epBtn.querySelector('.ep-watched-tag');
+                    if (isEpWatched && !tag) {
+                        tag = document.createElement('span');
+                        tag.className = 'ep-watched-tag';
+                        tag.innerHTML = '<i class="fas fa-check"></i>';
+                        epBtn.appendChild(tag);
+                    } else if (!isEpWatched && tag) {
+                        tag.remove();
+                    }
+                }
+            });
+        }
+    }
+
+    unmarkAllEpisodesWatched(showId) {
+        if (!this.state.watchedEpisodes) return;
+        if (this.state.watchedEpisodes[showId]) {
+            delete this.state.watchedEpisodes[showId];
+            this.saveWatchedEpisodes();
+        }
+
+        // Eğer izleme sayfasında bu dizi açıksa DOM'daki bölüm tiklerini kaldır
+        if (this.state.currentView === 'watch' && this.state.player.id === showId) {
+            document.querySelectorAll('#episodeGrid .ep-row').forEach(row => {
+                row.classList.remove('is-watched');
+                const checkBtn = row.querySelector('.ep-watched-check');
+                if (checkBtn) {
+                    checkBtn.classList.remove('watched');
+                    const icon = checkBtn.querySelector('i');
+                    if (icon) icon.className = 'fas fa-check';
+                }
+                const tag = row.querySelector('.ep-watched-tag');
+                if (tag) tag.remove();
+            });
+        }
     }
 
     saveRecentlyPlayed() {
@@ -1282,10 +2243,9 @@ class CineTrack {
         section.style.display = 'block';
 
         container.innerHTML = this.state.recentlyPlayed.map(movie => {
-            const badgeHtml = movie.type === 'tv' ? `<div class="movie-badge" style="background:var(--primary);color:white;">S${movie.season} E${movie.episode}</div>` : '';
+            const badgeHtml = movie.type === 'tv' ? `<div class="movie-badge" style="background:var(--primary);color:white;font-size:0.68rem;padding:2px 7px;">S${movie.season} E${movie.episode}</div>` : '';
             return `
-                <div class="movie-card" onclick="app.playMovie(${movie.id}, '${movie.type}')" 
-                     style="min-width: 140px; max-width: 140px; flex: 0 0 auto; scroll-snap-align: start; cursor: pointer;">
+                <div class="movie-card recent-movie-card" onclick="app.playMovie(${movie.id}, '${movie.type}')">
                     <div class="poster-wrapper">
                         ${badgeHtml}
                         <img class="movie-poster" src="${CONFIG.BASE_IMG + movie.poster_path}" alt="${movie.title}" loading="lazy">
@@ -1295,6 +2255,9 @@ class CineTrack {
                                 <span><i class="fas fa-play"></i> ${this.state.settings.language === 'tr' ? 'Kaldığın Yer' : 'Continue'}</span>
                             </div>
                         </div>
+                    </div>
+                    <div class="recent-progress-bar">
+                        <div class="recent-progress-fill"></div>
                     </div>
                 </div>
             `;
@@ -1309,6 +2272,7 @@ class CineTrack {
         let watched = localStorage.getItem(prefix + 'watched');
         let watchlist = localStorage.getItem(prefix + 'watchlist');
         let ignored = localStorage.getItem(prefix + 'ignored');
+        let watchedEpisodes = localStorage.getItem(prefix + 'watchedEpisodes');
         let recentlyPlayed = localStorage.getItem(prefix + 'recentlyPlayed');
 
         // 2. Fallback to legacy local storage if empty
@@ -1328,12 +2292,12 @@ class CineTrack {
         this.state.watched = watched ? JSON.parse(watched) : [];
         this.state.watchlist = watchlist ? JSON.parse(watchlist) : [];
         this.state.ignored = ignored ? JSON.parse(ignored) : [];
-        this.state.recentlyPlayed = recentlyPlayed ? JSON.parse(recentlyPlayed) : [];
-
+        this.state.watchedEpisodes = watchedEpisodes ? JSON.parse(watchedEpisodes) : {};
         this.state.recentlyPlayed = recentlyPlayed ? JSON.parse(recentlyPlayed) : [];
 
         this.renderStats();
         this.renderRecentlyPlayed();
+        this.refreshZeroRatings();
 
         // 3. Fetch from Cloud in background (Non-blocking)
         this.fetchFromCloud().then(() => {
@@ -1341,6 +2305,7 @@ class CineTrack {
             this.renderRecentlyPlayed();
             if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList', true);
             if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist', true);
+            this.refreshZeroRatings();
         });
     }
 
@@ -1360,11 +2325,13 @@ class CineTrack {
                 if (data.length > 0) {
                     const cloudData = data[0].content;
 
-                    // Simple merge or overwrite based on lastUpdated if available, 
-                    // but here we prioritize cloud since user said they are reset locally.
                     this.state.watched = cloudData.watched || [];
                     this.state.watchlist = cloudData.watchlist || [];
                     this.state.ignored = cloudData.ignored || [];
+                    if (cloudData.watchedEpisodes) {
+                        this.state.watchedEpisodes = cloudData.watchedEpisodes;
+                        localStorage.setItem(`ct_${this.state.user}_watchedEpisodes`, JSON.stringify(this.state.watchedEpisodes));
+                    }
 
                     // Save back to local to prevent "empty list" on next load
                     localStorage.setItem(`ct_${this.state.user}_watched`, JSON.stringify(this.state.watched));
@@ -1491,7 +2458,7 @@ class CineTrack {
 
         // Update previousView only if switching FROM a main view TO a different view
         // This ensures that when we are in 'watch' view, previousView stays as 'search' or 'watched'
-        const mainViews = ['search', 'watched', 'watchlist', 'profile'];
+        const mainViews = ['search', 'watched', 'watchlist', 'collections', 'profile'];
         if (viewId !== this.state.currentView && mainViews.includes(this.state.currentView)) {
             this.state.previousView = this.state.currentView;
         }
@@ -1528,14 +2495,16 @@ class CineTrack {
 
         // Specific View Logic
         if (viewId === 'watched') {
-            const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab || 'list';
-            if (activeTab === 'collections') {
-                this.renderCollections();
-            } else {
-                this.renderGrid(this.state.watched, 'watchedList');
-            }
+            this.renderGrid(this.state.watched, 'watchedList');
+            this.refreshZeroRatings('watched');
         }
-        if (viewId === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
+        if (viewId === 'watchlist') {
+            this.renderGrid(this.state.watchlist, 'watchlist');
+            this.refreshZeroRatings('watchlist');
+        }
+        if (viewId === 'collections') {
+            this.renderUniversesPage();
+        }
 
         if (this.state.settings.tvMode && this.keyboardManager) {
             this.keyboardManager.focusedIndex = -1;
@@ -1575,41 +2544,44 @@ class CineTrack {
         if (iframe) iframe.src = '';
 
         try {
-            // Fetch detailed info
-            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+            // Fetch detailed info with credits in user's UI language
+            const apiLang = this.state.settings.language === 'tr' ? 'tr-TR' : 'en-US';
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${CONFIG.TMDB_KEY}&language=${apiLang}&append_to_response=credits`);
             const data = await res.json();
+
+            // If Turkish overview is empty, fallback to English overview
+            if (!data.overview && apiLang !== 'en-US') {
+                try {
+                    const enRes = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+                    const enData = await enRes.json();
+                    if (enData.overview) data.overview = enData.overview;
+                } catch (e) {}
+            }
+
             this.state.currentMovieData = data;
 
-            // Populate Sidebar & Info
+            // Populate Header Title & Meta
             const titleEl = document.getElementById('watchMovieTitle');
-            if (titleEl) titleEl.textContent = data.original_title || data.original_name || data.title || data.name;
+            if (titleEl) titleEl.textContent = data.title || data.name || data.original_title || data.original_name;
 
-            const ratingEl = document.getElementById('watchRating');
-            if (ratingEl) ratingEl.textContent = data.vote_average.toFixed(1);
-
-            const overviewEl = document.getElementById('watchOverview');
-            if (overviewEl) overviewEl.textContent = data.overview;
-
-            const backdropEl = document.getElementById('watchBackdrop');
-            if (backdropEl) backdropEl.style.backgroundImage = `url(${CONFIG.HERO_IMG}${data.backdrop_path})`;
-
+            const scoreHtml = data.vote_average > 0
+                ? `<span><i class="fas fa-star" style="color:var(--star);"></i> ${data.vote_average.toFixed(1)}</span>`
+                : '';
             const metaHtml = `
                 <span><i class="fas fa-calendar"></i> ${(data.release_date || data.first_air_date || '').split('-')[0]}</span>
                 <span><i class="fas fa-clock"></i> ${data.runtime ? data.runtime + ' min' : (data.episode_run_time ? data.episode_run_time[0] + ' min' : '')}</span>
+                ${scoreHtml}
             `;
             const metaEl = document.getElementById('watchMovieMeta');
             if (metaEl) metaEl.innerHTML = metaHtml;
 
-            const genresEl = document.getElementById('watchGenres');
-            if (genresEl) {
-                const genresHtml = data.genres.map(g => `<span class="genre-tag">${g.name}</span>`).join('');
-                genresEl.innerHTML = genresHtml;
-            }
+            // Render Extra Details, Cast List, and Bento Info
+            this.renderWatchDetails(data, type);
 
             // Handle TV specific parts
             const tvArea = document.getElementById('tvSelectorArea');
             if (type === 'tv') {
-                tvArea.style.display = 'block';
+                tvArea.style.display = 'flex';
                 await this.fetchTvMeta(id);
             } else {
                 tvArea.style.display = 'none';
@@ -1652,8 +2624,10 @@ class CineTrack {
                 return;
             }
 
-            collectionArea.style.display = 'block';
-            collectionTitle.innerHTML = `<i class="fas fa-layer-group"></i> ${data.name}`;
+            collectionArea.style.display = 'flex';
+            const lang = this.state.settings.language;
+            const countText = `${data.parts.length} ${lang === 'tr' ? 'Film' : 'Movies'}`;
+            collectionTitle.innerHTML = `<span style="display:flex;align-items:center;gap:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="fas fa-layer-group"></i> <span>${data.name}</span></span><span class="collection-count-badge">${countText}</span>`;
 
             // Sort by release date
             data.parts.sort((a, b) => new Date(a.release_date || 0) - new Date(b.release_date || 0));
@@ -1700,6 +2674,172 @@ class CineTrack {
         }).join('');
     }
 
+    renderWatchDetails(data, type) {
+        const container = document.getElementById('watchDetails');
+        if (!container) return;
+
+        const lang = this.state.settings.language;
+        const isTr = lang === 'tr';
+        const isTv = type === 'tv';
+
+        // 1. Overview text
+        const overview = data.overview || (isTr ? 'Bu yapım için henüz bir özet veya açıklama bulunmuyor.' : 'No overview available for this title.');
+
+        // 2. Credits: Cast & Directors/Creators
+        const credits = data.credits || {};
+        const castList = credits.cast || [];
+        const crewList = credits.crew || [];
+
+        let directorOrCreator = '';
+        if (isTv) {
+            const creators = (data.created_by || []).map(c => c.name).join(', ');
+            directorOrCreator = creators || (crewList.find(c => c.job === 'Executive Producer')?.name || '—');
+        } else {
+            const directors = crewList.filter(c => c.job === 'Director').map(c => c.name).join(', ');
+            directorOrCreator = directors || '—';
+        }
+
+        // 3. Score
+        const score = (typeof data.vote_average === 'number' && data.vote_average > 0)
+            ? data.vote_average.toFixed(1)
+            : '—';
+
+        // 4. Duration
+        let duration = '—';
+        if (data.runtime) {
+            const h = Math.floor(data.runtime / 60);
+            const m = data.runtime % 60;
+            duration = h > 0 ? `${h}s ${m}dk` : `${m} dk`;
+        } else if (data.episode_run_time && data.episode_run_time.length > 0) {
+            duration = `~${data.episode_run_time[0]} ${isTr ? 'dk / bölüm' : 'min / ep'}`;
+        }
+
+        // 5. Release Date
+        const releaseDate = data.release_date || data.first_air_date || '';
+        const year = releaseDate ? releaseDate.split('-')[0] : '—';
+
+        // 6. Genres
+        const genresHtml = (data.genres || [])
+            .map(g => `<span class="detail-genre-chip">${g.name}</span>`)
+            .join('');
+
+        // 7. Cast Cards (up to 18 actors)
+        const castHtml = castList.slice(0, 18).map(c => {
+            const avatarHtml = c.profile_path
+                ? `<img src="${CONFIG.BASE_IMG + c.profile_path}" alt="${c.name}" loading="lazy">`
+                : `<div class="cast-avatar-fallback"><i class="fas fa-user"></i></div>`;
+            return `
+                <div class="cast-card">
+                    <div class="cast-avatar">
+                        ${avatarHtml}
+                    </div>
+                    <div class="cast-info">
+                        <div class="cast-name" title="${c.name}">${c.name}</div>
+                        <div class="cast-character" title="${c.character || ''}">${c.character || ''}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // 8. Status translation
+        let statusText = data.status || '—';
+        if (isTr) {
+            if (data.status === 'Released') statusText = 'Vizyonda / Yayınlandı';
+            else if (data.status === 'Ended') statusText = 'Tamamlandı (Final)';
+            else if (data.status === 'Returning Series') statusText = 'Devam Ediyor';
+            else if (data.status === 'Post Production') statusText = 'Yapım Aşamasında';
+            else if (data.status === 'In Production') statusText = 'Çekim Aşamasında';
+            else if (data.status === 'Planned') statusText = 'Planlanan';
+        }
+
+        // 9. Financials (for movies)
+        let budgetStr = '';
+        if (data.budget && data.budget > 0) {
+            budgetStr = `$${(data.budget / 1000000).toFixed(1)}M`;
+        }
+        let revenueStr = '';
+        if (data.revenue && data.revenue > 0) {
+            revenueStr = `$${(data.revenue / 1000000).toFixed(1)}M`;
+        }
+
+        container.innerHTML = `
+            <div class="details-section overview-section">
+                <div class="details-section-header">
+                    <h3><i class="fas fa-align-left"></i> ${isTr ? 'Özet ve Hikaye' : 'Overview'}</h3>
+                </div>
+                <p class="details-overview-text">${overview}</p>
+            </div>
+
+            ${castHtml ? `
+            <div class="details-section cast-section">
+                <div class="details-section-header">
+                    <h3><i class="fas fa-users"></i> ${isTr ? 'Oyuncu Kadrosu' : 'Cast'}</h3>
+                    <span class="details-section-sub">${castList.length} ${isTr ? 'Oyuncu' : 'Actors'}</span>
+                </div>
+                <div class="cast-scroll-wrapper">
+                    <div class="cast-scroll">
+                        ${castHtml}
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            <div class="details-section info-section">
+                <div class="details-section-header">
+                    <h3><i class="fas fa-circle-info"></i> ${isTr ? 'Ek Bilgiler ve Künye' : 'Details & Info'}</h3>
+                </div>
+                <div class="details-bento-grid">
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-video"></i> ${isTv ? (isTr ? 'Yaratıcı' : 'Creator') : (isTr ? 'Yönetmen' : 'Director')}</span>
+                        <span class="bento-value">${directorOrCreator}</span>
+                    </div>
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-tags"></i> ${isTr ? 'Türler' : 'Genres'}</span>
+                        <div class="bento-tags">${genresHtml || '—'}</div>
+                    </div>
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-star"></i> ${isTr ? 'Puan & Oy' : 'Rating & Votes'}</span>
+                        <span class="bento-value"><i class="fas fa-star" style="color:var(--star);"></i> ${score} <small class="bento-sub">(${data.vote_count || 0} ${isTr ? 'oy' : 'votes'})</small></span>
+                    </div>
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-clock"></i> ${isTr ? 'Süre' : 'Duration'}</span>
+                        <span class="bento-value">${duration}</span>
+                    </div>
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-calendar-day"></i> ${isTr ? 'Çıkış Tarihi' : 'Release Date'}</span>
+                        <span class="bento-value">${releaseDate || year}</span>
+                    </div>
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-signal"></i> ${isTr ? 'Durum' : 'Status'}</span>
+                        <span class="bento-value">${statusText}</span>
+                    </div>
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-globe"></i> ${isTr ? 'Orijinal Başlık & Dil' : 'Original Title & Lang'}</span>
+                        <span class="bento-value">${data.original_title || data.original_name || '—'} (${(data.original_language || '').toUpperCase()})</span>
+                    </div>
+                    ${budgetStr ? `
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-coins"></i> ${isTr ? 'Bütçe' : 'Budget'}</span>
+                        <span class="bento-value">${budgetStr}</span>
+                    </div>
+                    ` : ''}
+                    ${revenueStr ? `
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-money-bill-trend-up"></i> ${isTr ? 'Hasılat' : 'Box Office'}</span>
+                        <span class="bento-value">${revenueStr}</span>
+                    </div>
+                    ` : ''}
+                    ${data.production_companies && data.production_companies.length > 0 ? `
+                    <div class="bento-info-card">
+                        <span class="bento-label"><i class="fas fa-building"></i> ${isTr ? 'Yapım Şirketleri' : 'Production'}</span>
+                        <span class="bento-value">${data.production_companies.slice(0, 3).map(p => p.name).join(', ')}</span>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
     handleWatchAction(type) {
         const { id, type: mediaType } = this.state.player;
         this.toggleList(type, id, mediaType);
@@ -1736,39 +2876,107 @@ class CineTrack {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${id}?api_key=${CONFIG.TMDB_KEY}&language=${lang}`);
             const data = await res.json();
 
-            seasonSelect.innerHTML = data.seasons
-                .filter(s => s.season_number > 0)
-                .map(s => `<option value="${s.season_number}">${this.state.settings.language === 'tr' ? 'Sezon' : 'Season'} ${s.season_number}</option>`)
-                .join('');
+            const validSeasons = (data.seasons || []).filter(s => s.season_number > 0);
+            if (validSeasons.length === 0) return;
 
-            await this.handleSeasonChange();
+            // Determine target season & episode: start from next episode after last watched
+            const showRecord = this.state.watchedEpisodes?.[id];
+            let targetSeason = 1;
+            let targetEpisode = 1;
+
+            if (showRecord?.lastWatched) {
+                const lastS = Number(showRecord.lastWatched.season);
+                const lastE = Number(showRecord.lastWatched.episode);
+                const currentSeasonMeta = validSeasons.find(s => s.season_number === lastS);
+
+                if (currentSeasonMeta && lastE < currentSeasonMeta.episode_count) {
+                    targetSeason = lastS;
+                    targetEpisode = lastE + 1;
+                } else if (currentSeasonMeta && lastE >= currentSeasonMeta.episode_count) {
+                    const nextSeasonMeta = validSeasons.find(s => s.season_number > lastS);
+                    if (nextSeasonMeta) {
+                        targetSeason = nextSeasonMeta.season_number;
+                        targetEpisode = 1;
+                    } else {
+                        targetSeason = lastS;
+                        targetEpisode = lastE;
+                    }
+                } else {
+                    targetSeason = lastS;
+                    targetEpisode = lastE + 1;
+                }
+            } else {
+                const recent = this.state.recentlyPlayed?.find(r => r.id === id);
+                if (recent) {
+                    targetSeason = recent.season || 1;
+                    targetEpisode = recent.episode || 1;
+                }
+            }
+
+            this.state.player.season = targetSeason;
+            this.state.player.episode = targetEpisode;
+
+            seasonSelect.innerHTML = validSeasons
+                .map(s => `<option value="${s.season_number}" ${s.season_number == targetSeason ? 'selected' : ''}>${this.state.settings.language === 'tr' ? 'Sezon' : 'Season'} ${s.season_number}</option>`)
+                .join('');
+            seasonSelect.value = targetSeason;
+
+            await this.handleSeasonChange(false);
         } catch (e) {
             console.error('TV meta fetch error:', e);
         }
     }
 
-    async handleSeasonChange() {
+    async handleSeasonChange(isManualChange = false) {
         const season = document.getElementById('seasonSelect').value;
         const episodeGrid = document.getElementById('episodeGrid');
         this.state.player.season = season;
+
+        if (isManualChange) {
+            this.state.player.episode = 1;
+        }
 
         const lang = this.state.currentMovieData?.original_language || 'en';
         try {
             const res = await fetch(`https://api.themoviedb.org/3/tv/${this.state.player.id}/season/${season}?api_key=${CONFIG.TMDB_KEY}&language=${lang}`);
             const data = await res.json();
 
-            episodeGrid.innerHTML = data.episodes
-                .map(e => `
-                    <button class="ep-btn ${this.state.player.episode == e.episode_number ? 'active' : ''}" 
-                            onclick="app.playEpisode(${e.episode_number}, this)">
-                        <span class="ep-num">${e.episode_number}</span>
-                        <span class="ep-name">${e.name}</span>
-                    </button>
-                `)
+            const uiLang = this.state.settings.language;
+            episodeGrid.innerHTML = (data.episodes || [])
+                .map(e => {
+                    const isWatched = this.isEpisodeWatched(this.state.player.id, season, e.episode_number);
+                    const isActive = this.state.player.episode == e.episode_number;
+                    const tooltip = isWatched
+                        ? (uiLang === 'tr' ? 'İzlendi (Geri al)' : 'Watched (Undo)')
+                        : (uiLang === 'tr' ? 'İzlendi olarak işaretle' : 'Mark as watched');
+
+                    return `
+                        <div class="ep-row ${isActive ? 'active' : ''} ${isWatched ? 'is-watched' : ''}">
+                            <button class="ep-btn ${isActive ? 'active' : ''}" 
+                                    onclick="app.playEpisode(${e.episode_number}, this)">
+                                <span class="ep-num">${e.episode_number}</span>
+                                <span class="ep-name">${e.name}</span>
+                                ${isWatched ? '<span class="ep-watched-tag"><i class="fas fa-check"></i></span>' : ''}
+                            </button>
+                            <button class="ep-watched-check ${isWatched ? 'watched' : ''}" 
+                                    onclick="event.stopPropagation(); app.toggleEpisodeWatched(${this.state.player.id}, ${season}, ${e.episode_number}, this)"
+                                    title="${tooltip}">
+                                <i class="fas ${isWatched ? 'fa-check-circle' : 'fa-check'}"></i>
+                            </button>
+                        </div>
+                    `;
+                })
                 .join('');
 
-            // If we just swapped seasons, reset to ep 1 unless it's the first load
-            // For now, let's just keep the current selection or default to 1
+            // Scroll active episode into view
+            const activeRow = episodeGrid.querySelector('.ep-row.active');
+            if (activeRow) {
+                activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+
+            if (isManualChange) {
+                this.updatePlayerSrc();
+            }
         } catch (e) {
             console.error('Season change error:', e);
         }
@@ -1776,8 +2984,10 @@ class CineTrack {
 
     playEpisode(ep, btn) {
         this.state.player.episode = ep;
+        document.querySelectorAll('.ep-row').forEach(r => r.classList.remove('active'));
         document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        btn.closest('.ep-row')?.classList.add('active');
         this.updatePlayerSrc();
     }
 
@@ -1896,6 +3106,15 @@ class CineTrack {
             }
         });
 
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('universeDetailModal');
+                if (modal && modal.style.display !== 'none') {
+                    this.closeUniverseModal();
+                }
+            }
+        });
+
         // Set initial state
         history.replaceState({ view: this.state.currentView }, '', `#${this.state.currentView}`);
     }
@@ -2011,6 +3230,7 @@ class CineTrack {
                         watched: this.state.watched,
                         watchlist: this.state.watchlist,
                         ignored: this.state.ignored,
+                        watchedEpisodes: this.state.watchedEpisodes || {},
                         settings: this.state.settings,
                         lastUpdated: Date.now()
                     }
@@ -2019,6 +3239,27 @@ class CineTrack {
         } catch (e) {
             console.warn('Cloud sync failed:', e);
         }
+    }
+
+    checkDisclaimerState() {
+        if (localStorage.getItem('ct_disclaimer_dismissed') === 'true') {
+            document.body.classList.add('disclaimer-closed');
+        }
+    }
+
+    dismissDisclaimer() {
+        document.body.classList.add('disclaimer-closed');
+        localStorage.setItem('ct_disclaimer_dismissed', 'true');
+    }
+
+    openLegalModal() {
+        const modal = document.getElementById('legalModal');
+        if (modal) modal.style.display = 'flex';
+    }
+
+    closeLegalModal() {
+        const modal = document.getElementById('legalModal');
+        if (modal) modal.style.display = 'none';
     }
 }
 
