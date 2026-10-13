@@ -387,7 +387,7 @@ class CineTrack {
         const savedUser = localStorage.getItem('ct_active_user');
         if (savedUser) {
             this.state.user = savedUser;
-            
+
             // Ensure legacy user exists in system_users cloud list
             const users = await this.getCloudUsers();
             const userKey = savedUser.toLowerCase();
@@ -400,7 +400,7 @@ class CineTrack {
                 });
                 await this.saveCloudUsers(users);
             }
-            
+
             this.updateProfileUI();
         } else {
             this.showLogin();
@@ -505,15 +505,15 @@ class CineTrack {
     async handleAuth(mode = 'login', event = null) {
         const lang = this.state.settings.language;
         const strings = TRANSLATIONS[lang];
-        
+
         const usernameEl = document.getElementById('username');
         const passwordEl = document.getElementById('password');
-        
+
         if (!usernameEl || !passwordEl) return;
-        
+
         const user = usernameEl.value.trim();
         const password = passwordEl.value;
-        
+
         if (user.length < 3) {
             alert(strings.shortUsername);
             return;
@@ -522,18 +522,18 @@ class CineTrack {
             alert(strings.shortPassword);
             return;
         }
-        
+
         // Disable button during network requests
         const submitBtn = event && event.target ? (event.target.tagName === 'FORM' ? event.target.querySelector('button[type="submit"]') : event.target) : null;
         if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.textContent = lang === 'tr' ? 'Lütfen bekleyin...' : 'Please wait...';
         }
-        
+
         const users = await this.getCloudUsers();
         const userKey = user.toLowerCase();
         const existingUser = users.find(u => u.username.toLowerCase() === userKey);
-        
+
         if (mode === 'signup') {
             const passwordConfirmEl = document.getElementById('password_confirm');
             if (!passwordConfirmEl) {
@@ -541,25 +541,25 @@ class CineTrack {
                 return;
             }
             const passwordConfirm = passwordConfirmEl.value;
-            
+
             if (password !== passwordConfirm) {
                 alert(strings.passwordMismatch);
                 this.resetAuthBtn(event, mode, lang);
                 return;
             }
-            
+
             if (existingUser) {
                 alert(strings.userExists);
                 this.resetAuthBtn(event, mode, lang);
                 return;
             }
-            
+
             users.push({
                 username: user,
                 password: password,
                 avatar: 'fas fa-user-circle'
             });
-            
+
             await this.saveCloudUsers(users);
         } else {
             if (!existingUser) {
@@ -567,22 +567,22 @@ class CineTrack {
                 this.resetAuthBtn(event, mode, lang);
                 return;
             }
-            
+
             if (existingUser.password !== password) {
                 alert(strings.invalidCredentials);
                 this.resetAuthBtn(event, mode, lang);
                 return;
             }
         }
-        
+
         this.state.user = user;
         localStorage.setItem('ct_active_user', user);
-        
+
         // Also cache locally
         const localUsers = this.getUsers();
         localUsers[userKey] = password;
         localStorage.setItem('ct_users', JSON.stringify(localUsers));
-        
+
         document.getElementById('authOverlay').style.display = 'none';
         this.updateProfileUI();
         await this.loadMovieData();
@@ -691,12 +691,12 @@ class CineTrack {
             if (existingUser) {
                 existingUser.password = newPass;
                 await this.saveCloudUsers(users);
-                
+
                 // Also update local cache
                 const localUsers = this.getUsers();
                 localUsers[userKey] = newPass;
                 localStorage.setItem('ct_users', JSON.stringify(localUsers));
-                
+
                 alert(successMsg);
                 this.syncWithCloud();
             }
@@ -1320,14 +1320,14 @@ class CineTrack {
 
                             <div class="u-posters-strip">
                                 ${previewItems.map(item => {
-                                    const isW = isItemWatched(item);
-                                    const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
-                                    return `
+                const isW = isItemWatched(item);
+                const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
+                return `
                                         <div class="u-mini-poster ${isW ? 'watched' : ''}" title="${item.title}">
                                             ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" loading="lazy">` : ''}
                                         </div>
                                     `;
-                                }).join('')}
+            }).join('')}
                                 ${remainingCount > 0 ? `
                                     <div class="u-posters-more">+${remainingCount}</div>
                                 ` : ''}
@@ -1548,12 +1548,12 @@ class CineTrack {
 
                 <div class="u-modal-items-grid">
                     ${displayedItems.map(item => {
-                        const isWatched = isItemWatched(item);
-                        const inWatchlist = isItemWatchlist(item);
-                        const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
-                        const mType = item.media_type || item.type || 'movie';
+            const isWatched = isItemWatched(item);
+            const inWatchlist = isItemWatchlist(item);
+            const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
+            const mType = item.media_type || item.type || 'movie';
 
-                        return `
+            return `
                             <div class="u-item-card">
                                 <div class="u-item-poster-wrap">
                                     ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" loading="lazy">` : ''}
@@ -1593,7 +1593,7 @@ class CineTrack {
                                 </div>
                             </div>
                         `;
-                    }).join('')}
+        }).join('')}
                 </div>
             </div>
         `;
@@ -2068,7 +2068,7 @@ class CineTrack {
                 icon.className = isNowWatched ? 'fas fa-check-circle' : 'fas fa-check';
             }
             const lang = this.state.settings.language;
-            btnEl.title = isNowWatched 
+            btnEl.title = isNowWatched
                 ? (lang === 'tr' ? 'İzlendi (Geri al)' : 'Watched (Undo)')
                 : (lang === 'tr' ? 'İzlendi olarak işaretle' : 'Mark as watched');
 
@@ -2555,7 +2555,7 @@ class CineTrack {
                     const enRes = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
                     const enData = await enRes.json();
                     if (enData.overview) data.overview = enData.overview;
-                } catch (e) {}
+                } catch (e) { }
             }
 
             this.state.currentMovieData = data;

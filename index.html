@@ -8,7 +8,8 @@
     <!-- Fonts & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <link rel="stylesheet" href="style.css">
@@ -42,13 +43,18 @@
         <div class="disclaimer-inner">
             <i class="fas fa-scale-balanced disclaimer-icon"></i>
             <div class="disclaimer-text">
-                <strong>YASAL UYARI:</strong> Bu platform eğitim, araştırma ve kişisel arşivleme amacıyla geliştirilmiş bağımsız bir arayüz projesidir. Sunucularımızda hiçbir telifli medya veya video dosyası <u>barındırılmamaktadır</u>. Tüm içerikler, kamuya açık üçüncü taraf API'ler ve açık kaynak veritabanları üzerinden indekslenmektedir (5651 Sayılı Kanun).
+                <strong>YASAL UYARI:</strong> Bu platform eğitim, araştırma ve kişisel arşivleme amacıyla geliştirilmiş
+                bağımsız bir arayüz projesidir. Sunucularımızda hiçbir telifli medya veya video dosyası
+                <u>barındırılmamaktadır</u>. Tüm içerikler, kamuya açık üçüncü taraf API'ler ve açık kaynak
+                veritabanları üzerinden indekslenmektedir (5651 Sayılı Kanun).
             </div>
             <div class="disclaimer-actions">
-                <button class="disclaimer-btn-modal" onclick="app.openLegalModal()" title="Detaylı Yasal Bilgi ve DMCA Bildirimi">
+                <button class="disclaimer-btn-modal" onclick="app.openLegalModal()"
+                    title="Detaylı Yasal Bilgi ve DMCA Bildirimi">
                     <i class="fas fa-file-contract"></i> <span>Yasal Bilgi</span>
                 </button>
-                <button class="disclaimer-btn-close" onclick="app.dismissDisclaimer()" title="Bildirimi Kapat" aria-label="Bildirimi Kapat">
+                <button class="disclaimer-btn-close" onclick="app.dismissDisclaimer()" title="Bildirimi Kapat"
+                    aria-label="Bildirimi Kapat">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -222,9 +228,8 @@
 
                 <div class="search-wrapper list-search u-search-box">
                     <i class="fas fa-search search-icon"></i>
-                    <input type="text" id="universeSearchInput" class="search-input" 
-                           placeholder="Koleksiyon veya evren ara..." 
-                           oninput="app.handleUniverseSearch(this.value)">
+                    <input type="text" id="universeSearchInput" class="search-input"
+                        placeholder="Koleksiyon veya evren ara..." oninput="app.handleUniverseSearch(this.value)">
                 </div>
             </div>
 
@@ -431,7 +436,8 @@
                         <div id="tvSelectorArea" class="tv-selector-area" style="display: none;">
                             <div class="selector-header">
                                 <h3><i class="fas fa-list"></i> Bölümler</h3>
-                                <select id="seasonSelect" class="season-dropdown" onchange="app.handleSeasonChange(true)">
+                                <select id="seasonSelect" class="season-dropdown"
+                                    onchange="app.handleSeasonChange(true)">
                                     <!-- Populated by JS -->
                                 </select>
                             </div>
@@ -456,7 +462,8 @@
     </main>
 
     <!-- Legal & DMCA Modal -->
-    <div id="legalModal" class="legal-modal-overlay" style="display: none;" onclick="if(event.target === this) app.closeLegalModal()">
+    <div id="legalModal" class="legal-modal-overlay" style="display: none;"
+        onclick="if(event.target === this) app.closeLegalModal()">
         <div class="legal-modal-card">
             <div class="legal-modal-header">
                 <div class="legal-header-title">
@@ -468,22 +475,37 @@
             <div class="legal-modal-body">
                 <div class="legal-article">
                     <h4><i class="fas fa-server"></i> 1. Barındırma ve Sunucu Sorumsuzluğu (Non-Hosting Policy)</h4>
-                    <p>Bu platform (CineTrack), sunucularında veya yerel veritabanlarında kesinlikle hiçbir telif hakkı içeren ses, video, film, dizi veya dijital medya dosyası <strong>barındırmamakta, depolamamakta ve doğrudan dağıtmamaktadır</strong>. Sunucularımız yalnızca arayüz yazılımını ve kullanıcıların kişisel liste tercihlerini çalıştırmaktadır.</p>
+                    <p>Bu platform (CineTrack), sunucularında veya yerel veritabanlarında kesinlikle hiçbir telif hakkı
+                        içeren ses, video, film, dizi veya dijital medya dosyası <strong>barındırmamakta, depolamamakta
+                            ve doğrudan dağıtmamaktadır</strong>. Sunucularımız yalnızca arayüz yazılımını ve
+                        kullanıcıların kişisel liste tercihlerini çalıştırmaktadır.</p>
                 </div>
 
                 <div class="legal-article">
                     <h4><i class="fas fa-link"></i> 2. 5651 Sayılı Kanun Uyarınca Bağlantı Sağlayıcı Beyanı</h4>
-                    <p>5651 Sayılı <em>"İnternet Ortamında Yapılan Yayınların Düzenlenmesi ve Bu Yayınlar Yoluyla İşlenen Suçlarla Mücadele Edilmesi Hakkında Kanun"</em> (özellikle Madde 4 ve 5) kapsamında platformumuz içerik sağlayıcı veya yer sağlayıcı konumunda olmayıp; yalnızca internet üzerinde kamuya açık ve açık kaynak (open-source) veritabanlarından (The Movie Database - TMDB vb.) metaveri indeksleyen ve harici açık kaynak oynatıcı bağlantılarını bir araya getiren bir indeksleme/kataloglama arayüzüdür.</p>
+                    <p>5651 Sayılı <em>"İnternet Ortamında Yapılan Yayınların Düzenlenmesi ve Bu Yayınlar Yoluyla
+                            İşlenen Suçlarla Mücadele Edilmesi Hakkında Kanun"</em> (özellikle Madde 4 ve 5) kapsamında
+                        platformumuz içerik sağlayıcı veya yer sağlayıcı konumunda olmayıp; yalnızca internet üzerinde
+                        kamuya açık ve açık kaynak (open-source) veritabanlarından (The Movie Database - TMDB vb.)
+                        metaveri indeksleyen ve harici açık kaynak oynatıcı bağlantılarını bir araya getiren bir
+                        indeksleme/kataloglama arayüzüdür.</p>
                 </div>
 
                 <div class="legal-article">
-                    <h4><i class="fas fa-graduation-cap"></i> 3. Eğitici, Bilimsel ve Kişisel Arşiv Amacı (Fair Use)</h4>
-                    <p>Bu platform ticari amaç gütmeyen, herhangi bir kâr amacı veya abonelik ücreti bulunmayan, modern web yazılım mimarilerini araştırma ve kişisel medya kütüphanesi arşivleme amacıyla geliştirilmiş bağımsız bir eğitim ve hobi çalışmasıdır.</p>
+                    <h4><i class="fas fa-graduation-cap"></i> 3. Eğitici, Bilimsel ve Kişisel Arşiv Amacı (Fair Use)
+                    </h4>
+                    <p>Bu platform ticari amaç gütmeyen, herhangi bir kâr amacı veya abonelik ücreti bulunmayan, modern
+                        web yazılım mimarilerini araştırma ve kişisel medya kütüphanesi arşivleme amacıyla geliştirilmiş
+                        bağımsız bir eğitim ve hobi çalışmasıdır.</p>
                 </div>
 
                 <div class="legal-article">
-                    <h4><i class="fas fa-envelope-open-text"></i> 4. Uyar-Kaldır Prensibi ve Telif Bildirimi (Notice & Take-Down)</h4>
-                    <p>Telif hakkı sahibi veya yetkili yasal temsilcisi olduğunuz bir içeriğin bu platformdaki indeks bağlantılarından kaldırılmasını talep ediyorsanız, hak sahipliğinizi teyit eden belgeler ve ilgili içerik adı/bağlantısı ile birlikte doğrudan geliştiriciye başvurabilirsiniz. Bildirimi takiben ilgili bağlantılar ivedilikle sistemden temizlenecektir.</p>
+                    <h4><i class="fas fa-envelope-open-text"></i> 4. Uyar-Kaldır Prensibi ve Telif Bildirimi (Notice &
+                        Take-Down)</h4>
+                    <p>Telif hakkı sahibi veya yetkili yasal temsilcisi olduğunuz bir içeriğin bu platformdaki indeks
+                        bağlantılarından kaldırılmasını talep ediyorsanız, hak sahipliğinizi teyit eden belgeler ve
+                        ilgili içerik adı/bağlantısı ile birlikte doğrudan geliştiriciye başvurabilirsiniz. Bildirimi
+                        takiben ilgili bağlantılar ivedilikle sistemden temizlenecektir.</p>
                 </div>
             </div>
             <div class="legal-modal-footer">
@@ -493,7 +515,8 @@
     </div>
 
     <!-- Universe & Collection Details Modal -->
-    <div id="universeDetailModal" class="universe-modal-overlay" style="display: none;" onclick="if(event.target === this) app.closeUniverseModal()">
+    <div id="universeDetailModal" class="universe-modal-overlay" style="display: none;"
+        onclick="if(event.target === this) app.closeUniverseModal()">
         <div class="universe-modal-container">
             <button class="u-modal-close-btn" onclick="app.closeUniverseModal()" aria-label="Kapat">
                 <i class="fas fa-times"></i>
