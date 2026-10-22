@@ -157,6 +157,24 @@ const CATALOGS = [
     { id: 'animation', tr: 'Animasyon', en: 'Animation', icon: 'fa-film', type: 'movie', endpoint: 'discover/movie?with_genres=16&sort_by=popularity.desc' }
 ];
 
+const LIST_GENRES_CONFIG = [
+    { id: 'all', tr: 'Tümü', en: 'All', icon: 'fa-layer-group', genre_ids: [] },
+    { id: 'horror', tr: 'Korku', en: 'Horror', icon: 'fa-ghost', genre_ids: [27] },
+    { id: 'comedy', tr: 'Komedi', en: 'Comedy', icon: 'fa-laugh-beam', genre_ids: [35] },
+    { id: 'action', tr: 'Aksiyon', en: 'Action', icon: 'fa-fire', genre_ids: [28, 10759] },
+    { id: 'sci_fi', tr: 'Bilim Kurgu', en: 'Sci-Fi', icon: 'fa-robot', genre_ids: [878, 10765] },
+    { id: 'drama', tr: 'Dram', en: 'Drama', icon: 'fa-theater-masks', genre_ids: [18] },
+    { id: 'thriller', tr: 'Gerilim', en: 'Thriller', icon: 'fa-user-secret', genre_ids: [53] },
+    { id: 'adventure', tr: 'Macera', en: 'Adventure', icon: 'fa-mountain', genre_ids: [12, 10759] },
+    { id: 'animation', tr: 'Animasyon', en: 'Animation', icon: 'fa-film', genre_ids: [16] },
+    { id: 'romance', tr: 'Romantik', en: 'Romance', icon: 'fa-heart', genre_ids: [10749] },
+    { id: 'crime', tr: 'Suç', en: 'Crime', icon: 'fa-fingerprint', genre_ids: [80] },
+    { id: 'fantasy', tr: 'Fantastik', en: 'Fantasy', icon: 'fa-wand-magic-sparkles', genre_ids: [14, 10765] },
+    { id: 'mystery', tr: 'Gizem', en: 'Mystery', icon: 'fa-mask', genre_ids: [9648] },
+    { id: 'documentary', tr: 'Belgesel', en: 'Documentary', icon: 'fa-video', genre_ids: [99] },
+    { id: 'family', tr: 'Aile', en: 'Family', icon: 'fa-people-roof', genre_ids: [10751] }
+];
+
 
 class KeyboardManager {
     constructor(app) {
@@ -359,6 +377,10 @@ class CineTrack {
             sortStates: {
                 watched: { field: '', direction: 'desc' },
                 watchlist: { field: '', direction: 'desc' }
+            },
+            listFilters: {
+                watched: { genre: 'all', query: '' },
+                watchlist: { genre: 'all', query: '' }
             },
             genres: {},
             scrollPositions: {},
@@ -957,7 +979,10 @@ class CineTrack {
                             <span>${(movie.release_date || movie.first_air_date || '').split('-')[0]}</span>
                         </div>
                         <div class="movie-genres">
-                            ${(movie.genre_ids || []).slice(0, 2).map(id => this.state.genres[id]).filter(Boolean).join(' / ')}
+                            ${((movie.genres && movie.genres.length > 0)
+                                ? movie.genres.slice(0, 2).map(g => typeof g === 'object' ? (g.name || g.tr || g.en) : g).filter(Boolean)
+                                : (movie.genre_ids || []).slice(0, 2).map(id => this.state.genres[id]).filter(Boolean)
+                            ).join(' / ')}
                         </div>
                     </div>
                 </div>
@@ -1893,8 +1918,8 @@ class CineTrack {
             if (watchlistBtn) watchlistBtn.classList.toggle('active', this.isInList('watchlist', id));
         });
 
-        if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList');
-        if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
+        if (this.state.currentView === 'watched') this.renderUserList('watched');
+        if (this.state.currentView === 'watchlist') this.renderUserList('watchlist');
         this.renderWatchlistSpotlightBanner();
 
         if (this.state.player && (this.state.player.id === id || this.state.player.id == id)) {
@@ -1953,7 +1978,8 @@ class CineTrack {
         }
 
         this.saveMovieData();
-        this.renderGrid(this.state.watchlist, 'watchlist', true);
+        this.renderUserList('watchlist');
+        if (this.state.currentView === 'watched') this.renderUserList('watched');
         this.renderStats();
         this.renderWatchlistSpotlightBanner();
     }
@@ -2064,6 +2090,14 @@ class CineTrack {
                             }
                             if (data.runtime && !movie.runtime) {
                                 movie.runtime = data.runtime;
+                                itemUpdated = true;
+                            }
+                            if (data.genres && (!movie.genres || movie.genres.length === 0)) {
+                                movie.genres = data.genres;
+                                itemUpdated = true;
+                            }
+                            if (data.genre_ids && (!movie.genre_ids || movie.genre_ids.length === 0)) {
+                                movie.genre_ids = data.genre_ids;
                                 itemUpdated = true;
                             }
 
@@ -2724,8 +2758,8 @@ class CineTrack {
             this.renderStats();
             this.renderRecentlyPlayed();
             this.renderWatchlistSpotlightBanner();
-            if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList', true);
-            if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist', true);
+            if (this.state.currentView === 'watched') this.renderUserList('watched');
+            if (this.state.currentView === 'watchlist') this.renderUserList('watchlist');
             this.refreshZeroRatings();
         });
     }
@@ -2839,8 +2873,8 @@ class CineTrack {
 
         // Update stats and grids to refresh labels
         this.renderStats();
-        if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList', true);
-        if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist', true);
+        if (this.state.currentView === 'watched') this.renderUserList('watched');
+        if (this.state.currentView === 'watchlist') this.renderUserList('watchlist');
         if (this.state.currentView === 'search') this.renderWatchlistSpotlightBanner();
 
         // Update Search placeholder specifically
@@ -2929,11 +2963,11 @@ class CineTrack {
             this.renderRecentlyPlayed();
         }
         if (viewId === 'watched') {
-            this.renderGrid(this.state.watched, 'watchedList');
+            this.renderUserList('watched');
             this.refreshZeroRatings('watched');
         }
         if (viewId === 'watchlist') {
-            this.renderGrid(this.state.watchlist, 'watchlist');
+            this.renderUserList('watchlist');
             this.refreshZeroRatings('watchlist');
         }
         if (viewId === 'collections') {
@@ -3554,19 +3588,189 @@ class CineTrack {
     }
 
 
-    filterList(listKey, containerId, query) {
-        const list = this.state[listKey];
-        if (!query) {
-            this.renderGrid(list, containerId, true);
+    itemMatchesGenre(item, genreId) {
+        if (!genreId || genreId === 'all') return true;
+        const cat = LIST_GENRES_CONFIG.find(c => c.id === genreId);
+        if (!cat) return true;
+
+        const targetIds = cat.genre_ids || [];
+        const targetKeywords = [
+            cat.tr.toLowerCase(),
+            cat.en.toLowerCase(),
+            cat.id.toLowerCase()
+        ];
+
+        // 1. Direct genre_ids array check
+        if (Array.isArray(item.genre_ids) && item.genre_ids.some(id => targetIds.includes(Number(id)))) {
+            return true;
+        }
+
+        // 2. Direct genres array check (objects, ids, or strings)
+        if (Array.isArray(item.genres)) {
+            for (const g of item.genres) {
+                if (typeof g === 'object' && g !== null) {
+                    if (g.id && targetIds.includes(Number(g.id))) return true;
+                    if (g.name && targetKeywords.some(kw => g.name.toLowerCase().includes(kw))) return true;
+                } else if (typeof g === 'number' && targetIds.includes(g)) {
+                    return true;
+                } else if (typeof g === 'string') {
+                    const gLower = g.toLowerCase();
+                    if (targetKeywords.some(kw => gLower.includes(kw))) return true;
+                }
+            }
+        }
+
+        // 3. Fallback check using this.state.genres map for item.genre_ids
+        if (Array.isArray(item.genre_ids) && this.state.genres) {
+            for (const id of item.genre_ids) {
+                const name = (this.state.genres[id] || '').toLowerCase();
+                if (name && targetKeywords.some(kw => name.includes(kw))) return true;
+            }
+        }
+
+        // 4. Fallback check if item has single genre property (string)
+        if (typeof item.genre === 'string') {
+            const gLower = item.genre.toLowerCase();
+            if (targetKeywords.some(kw => gLower.includes(kw))) return true;
+        }
+
+        return false;
+    }
+
+    renderListGenreChips(listKey) {
+        const containerId = listKey === 'watched' ? 'watchedGenreFilter' : 'watchlistGenreFilter';
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const list = this.state[listKey] || [];
+        const activeGenre = (this.state.listFilters && this.state.listFilters[listKey]?.genre) || 'all';
+        const lang = this.state.settings.language || 'tr';
+
+        // Count items per category
+        const counts = { all: list.length };
+        LIST_GENRES_CONFIG.forEach(cat => {
+            if (cat.id === 'all') return;
+            let c = 0;
+            list.forEach(item => {
+                if (this.itemMatchesGenre(item, cat.id)) c++;
+            });
+            counts[cat.id] = c;
+        });
+
+        // Sort categories: 'all' always first, then categories with count > 0 (descending), then count == 0
+        const sortedCats = [...LIST_GENRES_CONFIG].sort((a, b) => {
+            if (a.id === 'all') return -1;
+            if (b.id === 'all') return 1;
+            const countA = counts[a.id] || 0;
+            const countB = counts[b.id] || 0;
+            if (countA > 0 && countB === 0) return -1;
+            if (countB > 0 && countA === 0) return 1;
+            if (countA !== countB) return countB - countA;
+            return 0;
+        });
+
+        container.innerHTML = sortedCats.map(cat => {
+            const count = counts[cat.id] || 0;
+            const isActive = activeGenre === cat.id;
+            const label = cat[lang] || cat.tr;
+            return `
+                <button class="chip ${isActive ? 'active' : ''} ${count === 0 && cat.id !== 'all' ? 'zero-count' : ''}" 
+                        onclick="app.setListGenreFilter('${listKey}', '${cat.id}')">
+                    <i class="fas ${cat.icon}"></i>
+                    <span>${label}</span>
+                    <span class="chip-count">${count}</span>
+                </button>
+            `;
+        }).join('');
+    }
+
+    setListGenreFilter(listKey, genreId) {
+        if (!this.state.listFilters) {
+            this.state.listFilters = {
+                watched: { genre: 'all', query: '' },
+                watchlist: { genre: 'all', query: '' }
+            };
+        }
+        const current = this.state.listFilters[listKey].genre;
+        if (current === genreId && genreId !== 'all') {
+            this.state.listFilters[listKey].genre = 'all';
+        } else {
+            this.state.listFilters[listKey].genre = genreId;
+        }
+
+        this.renderUserList(listKey);
+    }
+
+    renderUserList(listKey) {
+        const containerId = listKey === 'watched' ? 'watchedList' : 'watchlist';
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (!this.state.listFilters) {
+            this.state.listFilters = {
+                watched: { genre: 'all', query: '' },
+                watchlist: { genre: 'all', query: '' }
+            };
+        }
+
+        const filterState = this.state.listFilters[listKey];
+        const rawList = this.state[listKey] || [];
+
+        // 1. Filter by category
+        let filtered = rawList.filter(item => this.itemMatchesGenre(item, filterState.genre));
+
+        // 2. Filter by search query if any
+        if (filterState.query && filterState.query.trim()) {
+            const q = filterState.query.trim().toLowerCase();
+            filtered = filtered.filter(item => {
+                const title = (item.original_title || item.original_name || item.title || item.name || '').toLowerCase();
+                return title.includes(q);
+            });
+        }
+
+        // Render genre chips so counters reflect latest counts & active state
+        this.renderListGenreChips(listKey);
+
+        if (filtered.length === 0) {
+            const isTr = this.state.settings.language === 'tr';
+            const catObj = LIST_GENRES_CONFIG.find(c => c.id === filterState.genre);
+            const catName = catObj ? (catObj[this.state.settings.language] || catObj.tr) : '';
+
+            const emptyMsg = filterState.genre !== 'all'
+                ? (isTr ? `"${catName}" kategorisinde henüz film veya dizi bulunmuyor.` : `No movies or TV shows found in the "${catName}" category.`)
+                : (filterState.query
+                    ? (isTr ? 'Aramanıza uygun içerik bulunamadı.' : 'No results found matching your search.')
+                    : (isTr ? 'Bu liste henüz boş.' : 'This list is currently empty.'));
+
+            const resetBtnText = isTr ? 'Tüm Kategorileri Göster' : 'Show All Categories';
+
+            container.innerHTML = `
+                <div class="list-empty-state">
+                    <div class="empty-icon-wrap"><i class="fas fa-film"></i></div>
+                    <div class="empty-title">${isTr ? 'İçerik Bulunamadı' : 'No Content Found'}</div>
+                    <p class="empty-desc">${emptyMsg}</p>
+                    ${filterState.genre !== 'all' ? `
+                        <button class="empty-reset-btn" onclick="app.setListGenreFilter('${listKey}', 'all')">
+                            <i class="fas fa-layer-group"></i> <span>${resetBtnText}</span>
+                        </button>
+                    ` : ''}
+                </div>
+            `;
             return;
         }
 
-        const filtered = list.filter(item => {
-            const title = (item.original_title || item.original_name || item.title || item.name || '').toLowerCase();
-            return title.includes(query.toLowerCase());
-        });
-
         this.renderGrid(filtered, containerId, true);
+    }
+
+    filterList(listKey, containerId, query) {
+        if (!this.state.listFilters) {
+            this.state.listFilters = {
+                watched: { genre: 'all', query: '' },
+                watchlist: { genre: 'all', query: '' }
+            };
+        }
+        this.state.listFilters[listKey].query = query || '';
+        this.renderUserList(listKey);
     }
 
     sortList(listKey, field, containerId) {
@@ -3601,7 +3805,7 @@ class CineTrack {
             return 0;
         });
 
-        this.renderGrid(list, containerId, true);
+        this.renderUserList(listKey);
     }
 
     updateSortButtons(listKey, field, direction) {

@@ -2662,6 +2662,114 @@ input:checked+.slider:before {
     color: white;
 }
 
+/* List Genre Filter & Chips */
+.list-genre-filter {
+    margin-bottom: 1.6rem;
+    padding: 0.2rem 0 0.6rem;
+}
+
+.chip .chip-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    margin-left: 4px;
+    line-height: 1;
+    transition: var(--transition);
+}
+
+.chip:hover .chip-count {
+    background: rgba(255, 255, 255, 0.16);
+    color: var(--text-main);
+}
+
+.chip.active .chip-count {
+    background: rgba(255, 255, 255, 0.28);
+    color: #ffffff;
+}
+
+.chip.zero-count {
+    opacity: 0.55;
+}
+
+.chip.zero-count:hover {
+    opacity: 0.85;
+}
+
+/* List Empty State */
+.list-empty-state {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 1.5rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    margin: 1.5rem 0;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.list-empty-state .empty-icon-wrap {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.12);
+    color: var(--primary-light, #818cf8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    margin-bottom: 1.2rem;
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+}
+
+.list-empty-state .empty-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main, #ffffff);
+    margin-bottom: 0.5rem;
+}
+
+.list-empty-state .empty-desc {
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.92rem;
+    max-width: 380px;
+    margin-bottom: 1.4rem;
+    line-height: 1.5;
+}
+
+.list-empty-state .empty-reset-btn {
+    padding: 0.65rem 1.35rem;
+    font-size: 0.88rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 100px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.list-empty-state .empty-reset-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px var(--primary-glow);
+}
+
 /* Compact Mode Styles */
 body.compact-mode .movie-grid {
     grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
