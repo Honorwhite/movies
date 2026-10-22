@@ -1804,10 +1804,14 @@ class CineTrack {
 
     // --- List Management ---
     async toggleList(listType, id, mediaType = 'movie') {
+        const numId = Number(id);
         const list = this.state[listType];
-        const index = list.findIndex(item => item.id === id);
+        if (!list) return;
+
+        const index = list.findIndex(item => Number(item.id) === numId || item.id == id);
 
         if (index > -1) {
+            // Already in this list: remove it (toggle off)
             const removedItem = list[index];
             list.splice(index, 1);
             // If removed from watched and it's a TV show, clear marked episodes
@@ -1817,8 +1821,29 @@ class CineTrack {
             }
         } else {
             // Fetch basic details to save
-            const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
-            const movie = await res.json();
+            let movie = null;
+            try {
+                const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
+                if (res.ok) {
+                    movie = await res.json();
+                }
+            } catch (e) {
+                console.warn('TMDB fetch failed in toggleList:', e);
+            }
+
+            if (!movie) {
+                // Fallback to existing data if present in other list or current player
+                const otherListKey = listType === 'watched' ? 'watchlist' : 'watched';
+                const existing = this.state[otherListKey]?.find(item => Number(item.id) === numId || item.id == id);
+                if (existing) {
+                    movie = { ...existing };
+                } else if (this.state.player && (this.state.player.id === id || this.state.player.id == id) && this.state.currentMovieData) {
+                    movie = { ...this.state.currentMovieData };
+                } else {
+                    movie = { id: numId, title: '', media_type: mediaType };
+                }
+            }
+
             movie.media_type = mediaType;
             list.push(movie);
 
@@ -1826,37 +1851,53 @@ class CineTrack {
             if (listType === 'watched' && mediaType === 'tv') {
                 await this.markAllCurrentEpisodesWatched(id, movie);
             }
+
+            // Mutual exclusion: son tıklanan seçeneği al, diğerini kaldır
+            if (listType === 'watched') {
+                // Added to watched -> remove from watchlist if present
+                const wIdx = this.state.watchlist.findIndex(item => Number(item.id) === numId || item.id == id);
+                if (wIdx > -1) {
+                    this.state.watchlist.splice(wIdx, 1);
+                }
+            } else if (listType === 'watchlist') {
+                // Added to watchlist -> remove from watched if present
+                const wIdx = this.state.watched.findIndex(item => Number(item.id) === numId || item.id == id);
+                if (wIdx > -1) {
+                    const removedItem = this.state.watched[wIdx];
+                    this.state.watched.splice(wIdx, 1);
+                    const isTv = mediaType === 'tv' || (!removedItem?.title && !!removedItem?.name);
+                    if (isTv) {
+                        this.unmarkAllEpisodesWatched(id);
+                    }
+                }
+            }
         }
 
         this.saveMovieData();
 
-        // Manual update for search results to avoid full refresh
-        const container = document.getElementById('searchResults');
-        if (container) {
-            const card = container.querySelector(`.movie-card[data-id="${id}"]`);
-            if (card) {
-                if (listType === 'ignored' && this.isInList('ignored', id)) {
-                    card.classList.add('fade-out'); // Add an animation if possible
-                    setTimeout(() => card.remove(), 300);
-                    return;
-                }
-                const isAdded = this.isInList('watched', id) || this.isInList('watchlist', id);
-                card.classList.toggle('is-added', isAdded);
-
-                // Update specific buttons within the card
-                const watchedBtn = card.querySelector(`[onclick*="watched"]`);
-                const watchlistBtn = card.querySelector(`[onclick*="watchlist"]`);
-
-                if (watchedBtn) watchedBtn.classList.toggle('active', this.isInList('watched', id));
-                if (watchlistBtn) watchlistBtn.classList.toggle('active', this.isInList('watchlist', id));
+        // Update all matching cards across the DOM
+        const cards = document.querySelectorAll(`.movie-card[data-id="${id}"]`);
+        cards.forEach(card => {
+            if (listType === 'ignored' && this.isInList('ignored', id)) {
+                card.classList.add('fade-out');
+                setTimeout(() => card.remove(), 300);
+                return;
             }
-        }
+            const isAdded = this.isInList('watched', id) || this.isInList('watchlist', id);
+            card.classList.toggle('is-added', isAdded);
+
+            const watchedBtn = card.querySelector(`[onclick*="watched"]`);
+            const watchlistBtn = card.querySelector(`[onclick*="watchlist"]`);
+
+            if (watchedBtn) watchedBtn.classList.toggle('active', this.isInList('watched', id));
+            if (watchlistBtn) watchlistBtn.classList.toggle('active', this.isInList('watchlist', id));
+        });
 
         if (this.state.currentView === 'watched') this.renderGrid(this.state.watched, 'watchedList');
         if (this.state.currentView === 'watchlist') this.renderGrid(this.state.watchlist, 'watchlist');
-        if (listType === 'watchlist') this.renderWatchlistSpotlightBanner();
+        this.renderWatchlistSpotlightBanner();
 
-        if (this.state.currentView === 'watch' && this.state.player.id === id) {
+        if (this.state.player && (this.state.player.id === id || this.state.player.id == id)) {
             this.updateWatchActionsUI();
         }
 
@@ -1915,6 +1956,42 @@ class CineTrack {
         this.renderGrid(this.state.watchlist, 'watchlist', true);
         this.renderStats();
         this.renderWatchlistSpotlightBanner();
+    }
+
+    ensureListIntegrity() {
+        if (!Array.isArray(this.state.watchlist)) this.state.watchlist = [];
+        if (!Array.isArray(this.state.watched)) this.state.watched = [];
+
+        let cleaned = false;
+
+        // Deduplicate watchlist by id
+        const seenWatchlist = new Set();
+        const initialWatchlistLen = this.state.watchlist.length;
+        this.state.watchlist = this.state.watchlist.filter(item => {
+            if (!item || item.id == null) return false;
+            const key = String(item.id);
+            if (seenWatchlist.has(key)) return false;
+            seenWatchlist.add(key);
+            return true;
+        });
+        if (this.state.watchlist.length !== initialWatchlistLen) cleaned = true;
+
+        // "izlenecekteyse izlenene koymayalım" - Remove from watched if present in watchlist
+        const seenWatched = new Set();
+        const initialWatchedLen = this.state.watched.length;
+        this.state.watched = this.state.watched.filter(item => {
+            if (!item || item.id == null) return false;
+            const key = String(item.id);
+            // If already in watchlist, do not put in watched
+            if (seenWatchlist.has(key)) return false;
+            // Also deduplicate watched itself
+            if (seenWatched.has(key)) return false;
+            seenWatched.add(key);
+            return true;
+        });
+        if (this.state.watched.length !== initialWatchedLen) cleaned = true;
+
+        return cleaned;
     }
 
     isInList(listType, id) {
@@ -2632,6 +2709,11 @@ class CineTrack {
         this.state.watchedEpisodes = watchedEpisodes ? JSON.parse(watchedEpisodes) : {};
         this.state.recentlyPlayed = recentlyPlayed ? JSON.parse(recentlyPlayed) : [];
 
+        // Check and clean: if an item is in watchlist, it must not be in watched
+        if (this.ensureListIntegrity()) {
+            this.saveMovieData();
+        }
+
         this.renderStats();
         this.renderRecentlyPlayed();
         this.renderWatchlistSpotlightBanner();
@@ -2667,6 +2749,10 @@ class CineTrack {
                     this.state.watched = cloudData.watched || [];
                     this.state.watchlist = cloudData.watchlist || [];
                     this.state.ignored = cloudData.ignored || [];
+
+                    // Check and clean: if an item is in watchlist, it must not be in watched
+                    const cleaned = this.ensureListIntegrity();
+
                     if (cloudData.watchedEpisodes) {
                         this.state.watchedEpisodes = cloudData.watchedEpisodes;
                         localStorage.setItem(`ct_${this.state.user}_watchedEpisodes`, JSON.stringify(this.state.watchedEpisodes));
@@ -2676,6 +2762,10 @@ class CineTrack {
                     localStorage.setItem(`ct_${this.state.user}_watched`, JSON.stringify(this.state.watched));
                     localStorage.setItem(`ct_${this.state.user}_watchlist`, JSON.stringify(this.state.watchlist));
                     localStorage.setItem(`ct_${this.state.user}_ignored`, JSON.stringify(this.state.ignored));
+
+                    if (cleaned) {
+                        this.syncWithCloud();
+                    }
 
                     if (cloudData.settings) {
                         this.state.settings = { ...this.state.settings, ...cloudData.settings };
