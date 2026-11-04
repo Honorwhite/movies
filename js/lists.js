@@ -43,6 +43,7 @@ class ListsMethods {
             }
 
             movie.media_type = mediaType;
+            if (listType === 'watched') movie.watched_at = Date.now();
             list.push(movie);
 
             // If a TV show's main title is marked as watched, automatically mark all currently released episodes as watched!
@@ -72,6 +73,7 @@ class ListsMethods {
         }
 
         this.saveMovieData();
+        this.loadEpisodeRuntimes();
 
         // Update all matching cards across the DOM
         const cards = document.querySelectorAll(`.movie-card[data-id="${id}"]`);
@@ -135,11 +137,13 @@ class ListsMethods {
                         console.warn('Error fetching details in moveToWatched:', e);
                     }
                 }
+                targetMovie.watched_at = Date.now();
                 this.state.watched.push(targetMovie);
             } else {
                 const res = await fetch(`https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
                 const data = await res.json();
                 data.media_type = mediaType;
+                data.watched_at = Date.now();
                 targetMovie = data;
                 this.state.watched.push(data);
             }
@@ -151,6 +155,7 @@ class ListsMethods {
         }
 
         this.saveMovieData();
+        this.loadEpisodeRuntimes();
         this.renderUserList('watchlist');
         if (this.state.currentView === 'watched') this.renderUserList('watched');
         this.renderStats();
@@ -222,7 +227,7 @@ class ListsMethods {
                 // Find items that have vote_average === 0, null, or undefined
                 const candidates = list.filter(m => {
                     const score = typeof m.vote_average === 'number' ? m.vote_average : 0;
-                    if (score > 0) return false;
+                    if (score > 0 && !this.needsRuntimeDetails(m)) return false;
                     // Check once every 4 hours max to preserve network bandwidth
                     if (m._lastRatingChecked && (now - m._lastRatingChecked < 4 * 3600 * 1000)) return false;
                     return true;
@@ -265,6 +270,13 @@ class ListsMethods {
                                 movie.runtime = data.runtime;
                                 itemUpdated = true;
                             }
+                            // TV fields used for watch-time stats and new-episode reminders
+                            ['episode_run_time', 'number_of_episodes', 'number_of_seasons', 'seasons', 'last_episode_to_air', 'next_episode_to_air'].forEach(field => {
+                                if (data[field] !== undefined && JSON.stringify(data[field]) !== JSON.stringify(movie[field])) {
+                                    movie[field] = data[field];
+                                    itemUpdated = true;
+                                }
+                            });
                             if (data.genres && (!movie.genres || movie.genres.length === 0)) {
                                 movie.genres = data.genres;
                                 itemUpdated = true;
@@ -312,6 +324,16 @@ class ListsMethods {
         } finally {
             this._isRefreshingRatings = false;
         }
+    }
+
+    // True when the stats cannot compute this item's watch time yet
+    needsRuntimeDetails(item) {
+        if (this.isTvItem(item)) {
+            const hasEpisodes = item.number_of_episodes || (Array.isArray(item.seasons) && item.seasons.length);
+            const hasRuntime = (item.episode_run_time || []).some(n => n > 0) || item.last_episode_to_air;
+            return !hasEpisodes || !hasRuntime;
+        }
+        return !item.runtime;
     }
 
     itemMatchesGenre(item, genreId) {

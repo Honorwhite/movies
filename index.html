@@ -27,6 +27,8 @@
     <link rel="stylesheet" href="css/universes.css">
     <link rel="stylesheet" href="css/toast.css">
     <link rel="stylesheet" href="css/spotlight.css">
+    <link rel="stylesheet" href="css/insights.css">
+    <link rel="stylesheet" href="css/share.css">
     <link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260411" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260411" />
     <link rel="shortcut icon" href="/favicon.ico?v=20260411" />
@@ -95,19 +97,22 @@
             <span>CineTrack</span>
         </div>
         <div class="nav-links">
-            <button class="nav-btn active" onclick="app.switchView('search')" data-view="search">
+            <button class="nav-btn active" onclick="app.switchView('search')" data-view="search" title="Keşfet">
                 <i class="fas fa-compass"></i> <span data-i18n="explore">Keşfet</span>
             </button>
-            <button class="nav-btn" onclick="app.switchView('watched')" data-view="watched">
+            <button class="nav-btn" onclick="app.switchView('watched')" data-view="watched" title="İzlediklerim">
                 <i class="fas fa-check-circle"></i> <span data-i18n="watched">İzlediklerim</span>
             </button>
-            <button class="nav-btn" onclick="app.switchView('watchlist')" data-view="watchlist">
+            <button class="nav-btn" onclick="app.switchView('watchlist')" data-view="watchlist" title="İzlenecekler">
                 <i class="fas fa-bookmark"></i> <span data-i18n="watchlist">İzlenecekler</span>
             </button>
-            <button class="nav-btn" onclick="app.switchView('collections')" data-view="collections">
+            <button class="nav-btn" onclick="app.switchView('stats')" data-view="stats" title="İstatistikler">
+                <i class="fas fa-chart-column"></i> <span data-i18n="statsTab">İstatistikler</span>
+            </button>
+            <button class="nav-btn" onclick="app.switchView('collections')" data-view="collections" title="Koleksiyonlar">
                 <i class="fas fa-layer-group"></i> <span data-i18n="collections">Koleksiyonlar</span>
             </button>
-            <button class="nav-btn" onclick="app.switchView('profile')" data-view="profile">
+            <button class="nav-btn" onclick="app.switchView('profile')" data-view="profile" title="Profil">
                 <i class="fas fa-user-circle"></i> <span id="navProfileName">Profil</span>
             </button>
         </div>
@@ -129,6 +134,9 @@
             <div id="watchlistBannerSection" class="watchlist-spotlight-section" style="display: none;">
                 <!-- Populated dynamically by js/ -->
             </div>
+
+            <!-- New episodes of followed shows (js/reminders.js) -->
+            <div id="newEpisodesBanner" class="new-episodes" style="display: none;"></div>
 
             <!-- Recently Watched Section -->
             <div id="recentlyWatchedSection" style="display: none; margin-bottom: 2rem;">
@@ -219,6 +227,15 @@
             <div id="watchlistStats" class="stats-grid"></div>
             <div id="watchlistGenreFilter" class="genre-chips list-genre-filter"></div>
             <div id="watchlist" class="movie-grid"></div>
+        </section>
+
+        <!-- Stats View: watch history chart and top genres (js/stats.js) -->
+        <section id="statsView" class="view">
+            <div class="section-header">
+                <h2 class="section-title" data-i18n="statsTitle">İstatistikler</h2>
+            </div>
+            <div id="statsSummary" class="stats-grid"></div>
+            <div id="statsInsights" class="insights-grid"></div>
         </section>
 
         <!-- Collections & Universes View -->
@@ -350,6 +367,20 @@
                         </label>
                     </div>
 
+                    <div class="settings-item" onclick="document.getElementById('episodeNotifToggle').click()">
+                        <div class="s-text">
+                            <i class="fas fa-bell"></i>
+                            <div>
+                                <span>Yeni Bölüm Bildirimleri</span>
+                                <small>Takip ettiğin dizilerin yeni bölümü çıkınca haber ver (site açıkken)</small>
+                            </div>
+                        </div>
+                        <label class="switch" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="episodeNotifToggle" onchange="app.toggleEpisodeNotifications(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+
                     <div class="settings-item" onclick="app.toggleLanguage()">
                         <div class="s-text">
                             <i class="fas fa-language"></i>
@@ -369,6 +400,62 @@
                 <!-- System & Data -->
                 <h4 class="settings-section-title" data-i18n="accountData">Hesap ve Veri</h4>
                 <div class="settings-list">
+                    <div class="settings-item" onclick="app.shareWatchlist()">
+                        <div class="s-text">
+                            <i class="fas fa-share-nodes" style="color: var(--primary-light);"></i>
+                            <div>
+                                <span>İzleme Listemi Paylaş</span>
+                                <small id="shareDesc">İzlenecekler listen için bir bağlantı oluştur</small>
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right s-arrow"></i>
+                    </div>
+
+                    <div class="settings-item" id="stopShareItem" style="display: none;" onclick="app.stopSharing()">
+                        <div class="s-text">
+                            <i class="fas fa-link-slash"></i>
+                            <div>
+                                <span>Paylaşımı Kapat</span>
+                                <small>Bağlantı artık çalışmaz</small>
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right s-arrow"></i>
+                    </div>
+
+                    <div class="settings-item" onclick="app.exportCsv()">
+                        <div class="s-text">
+                            <i class="fas fa-file-csv" style="color: #22c55e;"></i>
+                            <div>
+                                <span>Listeleri CSV Olarak İndir</span>
+                                <small>İzlediklerim ve İzlenecekler, Excel ile açılabilir</small>
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right s-arrow"></i>
+                    </div>
+
+                    <div class="settings-item" onclick="app.startImport('watched')">
+                        <div class="s-text">
+                            <i class="fas fa-file-import"></i>
+                            <div>
+                                <span>İzlediklerime İçe Aktar</span>
+                                <small>Letterboxd veya IMDb CSV dosyası</small>
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right s-arrow"></i>
+                    </div>
+
+                    <div class="settings-item" onclick="app.startImport('watchlist')">
+                        <div class="s-text">
+                            <i class="fas fa-file-import"></i>
+                            <div>
+                                <span>İzleneceklere İçe Aktar</span>
+                                <small>Letterboxd veya IMDb izleme listesi CSV dosyası</small>
+                            </div>
+                        </div>
+                        <i class="fas fa-chevron-right s-arrow"></i>
+                    </div>
+                    <input type="file" id="importFile" accept=".csv,text/csv" hidden onchange="app.handleImportFile(this.files[0])">
+
                     <div class="settings-item" onclick="app.openLegalModal()">
                         <div class="s-text">
                             <i class="fas fa-scale-balanced" style="color: var(--accent);"></i>
@@ -565,6 +652,9 @@
     <script src="js/settings.js"></script>
     <script src="js/views.js"></script>
     <script src="js/player.js"></script>
+    <script src="js/transfer.js"></script>
+    <script src="js/reminders.js"></script>
+    <script src="js/share.js"></script>
     <script src="js/app.js"></script>
 </body>
 

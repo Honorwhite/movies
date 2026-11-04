@@ -44,11 +44,14 @@ class EpisodesMethods {
         if (idx > -1) {
             // Uncheck episode
             showRecord.episodes.splice(idx, 1);
+            if (showRecord.times) delete showRecord.times[epKey];
             isNowWatched = false;
             showRecord.lastWatched = this.computeLastWatchedEpisode(showRecord.episodes);
         } else {
             // Check episode as watched
             showRecord.episodes.push(epKey);
+            if (!showRecord.times) showRecord.times = {};
+            showRecord.times[epKey] = Date.now();
             isNowWatched = true;
             showRecord.lastWatched = { season: Number(season), episode: Number(episode), timestamp: Date.now() };
         }
@@ -91,7 +94,8 @@ class EpisodesMethods {
         this.syncWithCloud();
     }
 
-    async markAllCurrentEpisodesWatched(showId, tvData = null) {
+    // dated: false when the real watch date is unknown (old data), so the chart skips it
+    async markAllCurrentEpisodesWatched(showId, tvData = null, { dated = true, at = null, save = true } = {}) {
         let data = tvData;
         if (!data || !data.seasons || !Array.isArray(data.seasons) || !data.seasons.length) {
             try {
@@ -157,10 +161,11 @@ class EpisodesMethods {
                 episode: lastEpNum,
                 timestamp: Date.now()
             },
-            markedAt: Date.now()
+            markedAt: Date.now(),
+            datedAt: dated ? (at || Date.now()) : null
         };
 
-        this.saveWatchedEpisodes();
+        if (save) this.saveWatchedEpisodes();
 
         // Eğer izleme sayfasında bu dizi açıksa DOM'daki bölüm tiklerini hemen güncelle
         if (this.state.currentView === 'watch' && this.state.player.id === showId) {

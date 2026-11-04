@@ -1,6 +1,10 @@
 // Navigation between pages, toasts, legal notice, global event listeners
 // These methods are attached to CineTrack in js/app.js.
 class ViewsMethods {
+    escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     showToast(msg, icon = 'fa-check-circle') {
         let toast = document.getElementById('appToast');
         if (!toast) {
@@ -36,7 +40,7 @@ class ViewsMethods {
 
         // Update previousView only if switching FROM a main view TO a different view
         // This ensures that when we are in 'watch' view, previousView stays as 'search' or 'watched'
-        const mainViews = ['search', 'watched', 'watchlist', 'collections', 'profile'];
+        const mainViews = ['search', 'watched', 'watchlist', 'stats', 'collections', 'profile'];
         if (viewId !== this.state.currentView && mainViews.includes(this.state.currentView)) {
             this.state.previousView = this.state.currentView;
         }
@@ -86,6 +90,9 @@ class ViewsMethods {
         }
         if (viewId === 'collections') {
             this.renderUniversesPage();
+        }
+        if (viewId === 'stats') {
+            this.renderStats();
         }
 
         if (this.state.settings.tvMode && this.keyboardManager) {

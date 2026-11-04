@@ -28,7 +28,7 @@ js/                   Uygulama kodu (index.html'deki sırayla yüklenir, app.js 
   auth.js             Giriş, kayıt, şifre değiştirme
   sync.js             Listelerin tarayıcıya ve Supabase'e kaydedilmesi
   discover.js         Keşfet sayfası: trendler, arama, kataloglar
-  stats.js            İzleme istatistikleri
+  stats.js            İzleme süreleri, İstatistikler sekmesi (grafik, türler)
   universes.js        Film evrenleri sayfası
   lists.js            İzlediklerim / İzlenecekler listeleri
   episodes.js         Dizi bölüm takibi
@@ -36,9 +36,13 @@ js/                   Uygulama kodu (index.html'deki sırayla yüklenir, app.js 
   settings.js         Ayarlar ve dil
   views.js            Sayfalar arası geçiş, bildirimler
   player.js           İzleme sayfası
+  transfer.js         CSV dışa aktarma; Letterboxd / IMDb içe aktarma
+  reminders.js        Takip edilen dizilerin yeni bölüm hatırlatıcısı
+  share.js            İzleme listesini bağlantıyla paylaşma (?share=…)
   app.js              CineTrack sınıfı; diğer dosyaları birleştirir ve uygulamayı başlatır
 css/                  Stiller (index.html'deki sırayla yüklenir; sıra önemlidir)
 supabase/security.sql Veritabanı erişim kuralları ve eski hesapların taşınması
+supabase/share.sql    Paylaşılan listeler tablosu (security.sql'den sonra bir kez çalıştırılır)
 ```
 
 ### Yeni özellik eklerken
@@ -50,6 +54,13 @@ supabase/security.sql Veritabanı erişim kuralları ve eski hesapların taşın
 3. `js/app.js`'deki listeye ekleyin.
 
 Aynı isimde iki metot tanımlanırsa uygulama açılışta hata verir.
+
+## Özellik notları
+
+- **İzleme süreleri:** Diziler için her bölümün gerçek süresi TMDB'den bir kez alınır (yayındaki diziler haftada bir yenilenir). Süre bilinmiyorsa ortalama, o da yoksa 45 dk kullanılır.
+- **İzleme geçmişi grafiği:** İzleme tarihleri bu özellikle birlikte kaydedilmeye başlandı; daha önce işaretlenenler grafikte "tarihsiz" sayılır.
+- **Yeni bölüm hatırlatıcısı:** Site açıldığında en fazla 6 saatte bir kontrol eder. Statik bir site olduğu için tarayıcı bildirimleri yalnızca site bir sekmede açıkken gelir.
+- **İçe aktarma:** Letterboxd (`watched.csv`, `watchlist.csv`, `diary.csv`), IMDb (puanlar / izleme listesi) ve CineTrack'in kendi CSV'si desteklenir.
 
 ## Güvenlik notları
 

@@ -211,3 +211,30 @@
     }
 }
 
+
+/* Medium screens: six tabs do not fit with labels, so inactive tabs show only their icon */
+@media (min-width: 769px) and (max-width: 1279px) {
+    .nav-links {
+        gap: 0.5rem;
+    }
+
+    .nav-btn {
+        padding: 0.6rem 1rem;
+    }
+
+    .nav-btn:not(.active) span {
+        display: none;
+    }
+}
+
+/* Phones: let the six bottom-bar tabs shrink to fit (long labels get an ellipsis) */
+@media (max-width: 768px) {
+    .nav-links {
+        gap: 2px;
+    }
+
+    .nav-btn {
+        min-width: 0;
+        padding: 0 2px;
+    }
+}

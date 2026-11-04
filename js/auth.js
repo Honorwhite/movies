@@ -246,6 +246,10 @@ class AuthMethods {
         const autoPlayToggle = document.getElementById('autoPlayToggle');
         if (autoPlayToggle) autoPlayToggle.checked = this.state.settings.autoPlay;
 
+        const episodeNotifToggle = document.getElementById('episodeNotifToggle');
+        if (episodeNotifToggle) episodeNotifToggle.checked = this.state.settings.episodeNotifications;
+        this.renderShareSettings();
+
         this.applySettings();
         this.setLanguageUI();
     }

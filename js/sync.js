@@ -50,6 +50,8 @@ class SyncMethods {
             if (this.state.currentView === 'watched') this.renderUserList('watched');
             if (this.state.currentView === 'watchlist') this.renderUserList('watchlist');
             this.refreshZeroRatings();
+            this.loadEpisodeRuntimes();
+            this.checkNewEpisodes();
         });
     }
 
@@ -125,6 +127,7 @@ class SyncMethods {
                     }
                 });
             if (error) console.warn('Cloud sync failed:', error);
+            else this.scheduleSharedListUpdate();
         } catch (e) {
             console.warn('Cloud sync failed:', e);
         }

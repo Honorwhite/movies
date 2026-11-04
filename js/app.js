@@ -23,7 +23,9 @@ class CineTrack {
                 autoTurkishSub: localStorage.getItem('ct_auto_tr_sub') === 'true',
                 autoSource: localStorage.getItem('ct_auto_source') === 'true',
                 tvMode: localStorage.getItem('ct_tv_mode') === 'true',
-                autoPlay: localStorage.getItem('ct_auto_play') !== 'false'
+                autoPlay: localStorage.getItem('ct_auto_play') !== 'false',
+                episodeNotifications: localStorage.getItem('ct_episode_notifications') === 'true',
+                shareId: null
             },
             player: {
                 id: null,
@@ -55,6 +57,8 @@ class CineTrack {
 
     async init() {
         console.log('CineTrack Initializing...');
+        // A shared watchlist link (?share=…) shows a read-only page; no login needed
+        if (await this.openSharedListFromUrl()) return;
         localStorage.removeItem('ct_synced_universe_items');
         this.checkDisclaimerState();
         this.applySettings();
@@ -94,6 +98,9 @@ class CineTrack {
     SettingsMethods,
     ViewsMethods,
     PlayerMethods,
+    TransferMethods,
+    RemindersMethods,
+    ShareMethods,
 ].forEach(mixin => {
     Object.getOwnPropertyNames(mixin.prototype).forEach(name => {
         if (name === 'constructor') return;
