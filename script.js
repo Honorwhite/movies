@@ -54,6 +54,7 @@ const TRANSLATIONS = {
         hasAccount: 'Zaten hesabınız var mı? ',
         shortUsername: 'Kullanıcı adı en az 3 karakter olmalıdır.',
         shortPassword: 'Şifre en az 4 karakter olmalıdır.',
+        authFailed: 'Giriş yapılamadı. Lütfen tekrar deneyin.',
         passwordMismatch: 'Şifreler eşleşmiyor!',
         userExists: 'Bu kullanıcı adı zaten alınmış!',
         invalidCredentials: 'Kullanıcı adı veya şifre hatalı!',
@@ -121,6 +122,7 @@ const TRANSLATIONS = {
         hasAccount: 'Already have an account? ',
         shortUsername: 'Username must be at least 3 characters.',
         shortPassword: 'Password must be at least 4 characters.',
+        authFailed: 'Could not sign in. Please try again.',
         passwordMismatch: 'Passwords do not match!',
         userExists: 'This username is already taken!',
         invalidCredentials: 'Invalid username or password!',
@@ -140,8 +142,12 @@ const CONFIG = {
     BASE_IMG: 'https://image.tmdb.org/t/p/w500',
     HERO_IMG: 'https://image.tmdb.org/t/p/original',
     SUPABASE_URL: 'https://gbdqycgclxhblhhjhpbm.supabase.co',
+    AUTH_EMAIL_DOMAIN: 'users.cinetrack.app',
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdiZHF5Y2djbHhoYmxoaGpocGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0Njk2MjMsImV4cCI6MjA4MzA0NTYyM30.85TIwLzahIY30zRlY_y2afw_eziDaYLhXWCCh1HZu5I'
 };
+
+const MIN_PASSWORD_LENGTH = 4;
+const sb = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
 
 const CATALOGS = [
     { id: 'imdb_top', tr: 'IMDB Top', en: 'IMDB Top', icon: 'fa-star', type: 'movie', endpoint: 'discover/movie?sort_by=vote_average.desc&vote_count.gte=10000' },
@@ -424,78 +430,63 @@ class CineTrack {
 
     // --- Auth & Storage ---
     async checkAuth() {
-        const savedUser = localStorage.getItem('ct_active_user');
-        if (savedUser) {
-            this.state.user = savedUser;
+        // Clean up the old login system: it cached plain-text passwords here
+        localStorage.removeItem('ct_users');
+        localStorage.removeItem('ct_active_user');
 
-            // Ensure legacy user exists in system_users cloud list
-            const users = await this.getCloudUsers();
-            const userKey = savedUser.toLowerCase();
-            const existingUser = users.find(u => u.username.toLowerCase() === userKey);
-            if (!existingUser) {
-                users.push({
-                    username: savedUser,
-                    password: '1234',
-                    avatar: 'fas fa-user-circle'
-                });
-                await this.saveCloudUsers(users);
-            }
-
+        const { data } = await sb.auth.getSession();
+        const session = data && data.session;
+        if (session) {
+            this.setSessionUser(session);
             this.updateProfileUI();
         } else {
             this.showLogin();
         }
     }
 
-    async getCloudUsers() {
-        try {
-            const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/movie_tracker?id=eq.system_users`, {
-                headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
-                }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.length > 0 && data[0].content && data[0].content.users) {
-                    return data[0].content.users;
-                }
-            }
-        } catch (e) {
-            console.error('Failed to fetch system_users from cloud:', e);
-        }
-        return [];
+    setSessionUser(session) {
+        const meta = session.user.user_metadata || {};
+        this.state.user = meta.username || session.user.email.split('@')[0];
+        this.state.uid = session.user.id;
     }
 
-    async saveCloudUsers(usersList) {
-        try {
-            await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/movie_tracker`, {
-                method: 'POST',
-                headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'resolution=merge-duplicates'
-                },
-                body: JSON.stringify({
-                    id: 'system_users',
-                    content: {
-                        users: usersList,
-                        lastUpdated: Date.now()
-                    }
-                })
-            });
-        } catch (e) {
-            console.error('Failed to save system_users to cloud:', e);
-        }
+    // Supabase Auth needs an e-mail; usernames are turned into a private,
+    // never-mailed address (hex keeps any character, e.g. Turkish letters, valid).
+    usernameToEmail(username) {
+        const bytes = new TextEncoder().encode(username.trim().toLowerCase());
+        const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        return `u${hex}@${CONFIG.AUTH_EMAIL_DOMAIN}`;
     }
 
-    getUsers() {
-        try {
-            return JSON.parse(localStorage.getItem('ct_users') || '{}');
-        } catch (e) {
-            return {};
+    // Supabase requires at least 6 characters, but CineTrack has always allowed 4.
+    // A fixed suffix lets every existing password keep working unchanged.
+    // Never change this value: existing accounts would stop being able to sign in.
+    authPassword(password) {
+        return password + '#ct';
+    }
+
+    cloudRowId() {
+        return `user_${this.state.uid}`;
+    }
+
+    // Accounts from the old system: verify the old password on the server,
+    // create the Supabase account, then move the old lists over to it.
+    async migrateLegacyUser(user, email, password, strings) {
+        const { data: ok, error } = await sb.rpc('legacy_check', { p_username: user, p_password: password });
+        if (error || !ok) return null;
+
+        const { data, error: signUpError } = await sb.auth.signUp({
+            email,
+            password: this.authPassword(password),
+            options: { data: { username: user } }
+        });
+        if (signUpError || !data.session) {
+            console.error('Legacy account migration failed:', signUpError);
+            return null;
         }
+
+        await sb.rpc('legacy_claim', { p_username: user, p_password: password });
+        return data.session;
     }
 
     showLogin(mode = 'login') {
@@ -558,7 +549,7 @@ class CineTrack {
             alert(strings.shortUsername);
             return;
         }
-        if (password.length < 4) {
+        if (password.length < MIN_PASSWORD_LENGTH) {
             alert(strings.shortPassword);
             return;
         }
@@ -570,9 +561,8 @@ class CineTrack {
             submitBtn.textContent = lang === 'tr' ? 'Lütfen bekleyin...' : 'Please wait...';
         }
 
-        const users = await this.getCloudUsers();
-        const userKey = user.toLowerCase();
-        const existingUser = users.find(u => u.username.toLowerCase() === userKey);
+        const email = this.usernameToEmail(user);
+        let session = null;
 
         if (mode === 'signup') {
             const passwordConfirmEl = document.getElementById('password_confirm');
@@ -588,40 +578,48 @@ class CineTrack {
                 return;
             }
 
-            if (existingUser) {
+            // Names still waiting in the old system are reserved for their owners
+            const { data: taken } = await sb.rpc('legacy_user_exists', { p_username: user });
+            if (taken) {
                 alert(strings.userExists);
                 this.resetAuthBtn(event, mode, lang);
                 return;
             }
 
-            users.push({
-                username: user,
-                password: password,
-                avatar: 'fas fa-user-circle'
+            const { data, error } = await sb.auth.signUp({
+                email,
+                password: this.authPassword(password),
+                options: { data: { username: user } }
             });
-
-            await this.saveCloudUsers(users);
-        } else {
-            if (!existingUser) {
-                alert(strings.invalidCredentials);
+            if (error) {
+                alert(/registered|exists/i.test(error.message) ? strings.userExists : error.message);
                 this.resetAuthBtn(event, mode, lang);
                 return;
             }
-
-            if (existingUser.password !== password) {
-                alert(strings.invalidCredentials);
-                this.resetAuthBtn(event, mode, lang);
-                return;
+            session = data.session;
+        } else {
+            const { data, error } = await sb.auth.signInWithPassword({ email, password: this.authPassword(password) });
+            if (!error) {
+                session = data.session;
+                // Finishes a migration that was interrupted earlier (no-op otherwise)
+                sb.rpc('legacy_claim', { p_username: user, p_password: password });
+            } else {
+                session = await this.migrateLegacyUser(user, email, password, strings);
+                if (!session) {
+                    alert(strings.invalidCredentials);
+                    this.resetAuthBtn(event, mode, lang);
+                    return;
+                }
             }
         }
 
-        this.state.user = user;
-        localStorage.setItem('ct_active_user', user);
+        if (!session) {
+            alert(strings.authFailed);
+            this.resetAuthBtn(event, mode, lang);
+            return;
+        }
 
-        // Also cache locally
-        const localUsers = this.getUsers();
-        localUsers[userKey] = password;
-        localStorage.setItem('ct_users', JSON.stringify(localUsers));
+        this.setSessionUser(session);
 
         document.getElementById('authOverlay').style.display = 'none';
         this.updateProfileUI();
@@ -646,8 +644,8 @@ class CineTrack {
         }
     }
 
-    logout() {
-        localStorage.removeItem('ct_active_user');
+    async logout() {
+        await sb.auth.signOut();
         location.reload();
     }
 
@@ -715,32 +713,21 @@ class CineTrack {
         const lang = this.state.settings.language;
         const promptMsg = lang === 'tr' ? 'Yeni şifrenizi girin:' : 'Enter your new password:';
         const successMsg = lang === 'tr' ? 'Şifreniz başarıyla güncellendi!' : 'Password updated successfully!';
-        const shortPassMsg = lang === 'tr' ? 'Şifre en az 4 karakter olmalıdır.' : 'Password must be at least 4 characters.';
+        const shortPassMsg = TRANSLATIONS[lang].shortPassword;
 
         const newPass = prompt(promptMsg);
         if (!newPass) return;
-        if (newPass.length < 4) {
+        if (newPass.length < MIN_PASSWORD_LENGTH) {
             alert(shortPassMsg);
             return;
         }
 
-        if (this.state.user) {
-            const users = await this.getCloudUsers();
-            const userKey = this.state.user.toLowerCase();
-            const existingUser = users.find(u => u.username.toLowerCase() === userKey);
-            if (existingUser) {
-                existingUser.password = newPass;
-                await this.saveCloudUsers(users);
-
-                // Also update local cache
-                const localUsers = this.getUsers();
-                localUsers[userKey] = newPass;
-                localStorage.setItem('ct_users', JSON.stringify(localUsers));
-
-                alert(successMsg);
-                this.syncWithCloud();
-            }
+        const { error } = await sb.auth.updateUser({ password: this.authPassword(newPass) });
+        if (error) {
+            alert(error.message);
+            return;
         }
+        alert(successMsg);
     }
 
     async fetchGenres() {
@@ -2768,15 +2755,13 @@ class CineTrack {
         if (!this.state.user) return;
 
         try {
-            const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/movie_tracker?id=eq.user_${this.state.user}`, {
-                headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`
-                }
-            });
+            const { data, error } = await sb
+                .from('movie_tracker')
+                .select('content')
+                .eq('id', this.cloudRowId());
+            if (error) console.error('Failed to fetch from cloud:', error);
 
-            if (res.ok) {
-                const data = await res.json();
+            if (!error) {
                 if (data.length > 0) {
                     const cloudData = data[0].content;
 
@@ -3854,16 +3839,11 @@ class CineTrack {
         if (!this.state.user) return;
 
         try {
-            await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/movie_tracker`, {
-                method: 'POST',
-                headers: {
-                    'apikey': CONFIG.SUPABASE_KEY,
-                    'Authorization': `Bearer ${CONFIG.SUPABASE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'resolution=merge-duplicates'
-                },
-                body: JSON.stringify({
-                    id: `user_${this.state.user}`,
+            const { error } = await sb
+                .from('movie_tracker')
+                .upsert({
+                    id: this.cloudRowId(),
+                    owner: this.state.uid,
                     content: {
                         watched: this.state.watched,
                         watchlist: this.state.watchlist,
@@ -3872,8 +3852,8 @@ class CineTrack {
                         settings: this.state.settings,
                         lastUpdated: Date.now()
                     }
-                })
-            });
+                });
+            if (error) console.warn('Cloud sync failed:', error);
         } catch (e) {
             console.warn('Cloud sync failed:', e);
         }
