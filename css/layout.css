@@ -227,14 +227,63 @@
     }
 }
 
-/* Phones: let the six bottom-bar tabs shrink to fit (long labels get an ellipsis) */
+/* Phones: İstatistikler and Profil move from the bottom bar to a top bar */
 @media (max-width: 768px) {
-    .nav-links {
-        gap: 2px;
+    .mobile-top-bar {
+        display: flex;
+        position: sticky;
+        top: 0;
+        z-index: 1001;
+        align-items: center;
+        justify-content: space-between;
+        height: 58px;
+        padding: 0 1rem;
+        background: rgba(11, 12, 22, 0.84);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-bottom: 1px solid var(--glass-border);
     }
 
-    .nav-btn {
-        min-width: 0;
-        padding: 0 2px;
+    .mobile-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1.25rem;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .mobile-top-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .mobile-top-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 1px solid var(--glass-border);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-muted);
+        font-size: 1.05rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .mobile-top-btn.active {
+        color: white;
+        background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+        border-color: rgba(255, 255, 255, 0.2);
+        box-shadow: 0 6px 18px var(--primary-glow);
+    }
+
+    .nav-btn[data-view="stats"],
+    .nav-btn[data-view="profile"] {
+        display: none;
     }
 }

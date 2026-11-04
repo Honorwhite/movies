@@ -47,7 +47,7 @@ class ViewsMethods {
         this.state.currentView = viewId;
 
         // Update Nav
-        document.querySelectorAll('.nav-btn').forEach(btn => {
+        document.querySelectorAll('.nav-btn, .mobile-top-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.view === viewId);
         });
 
