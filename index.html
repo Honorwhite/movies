@@ -12,7 +12,21 @@
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <link rel="stylesheet" href="style.css">
+    <!-- Order matters: later files override earlier ones -->
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/cards.css">
+    <link rel="stylesheet" href="css/auth.css">
+    <link rel="stylesheet" href="css/profile.css">
+    <link rel="stylesheet" href="css/watch.css">
+    <link rel="stylesheet" href="css/collections.css">
+    <link rel="stylesheet" href="css/filters.css">
+    <link rel="stylesheet" href="css/modes.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <link rel="stylesheet" href="css/legal.css">
+    <link rel="stylesheet" href="css/universes.css">
+    <link rel="stylesheet" href="css/toast.css">
+    <link rel="stylesheet" href="css/spotlight.css">
     <link rel="icon" type="image/png" href="/favicon-96x96.png?v=20260411" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260411" />
     <link rel="shortcut icon" href="/favicon.ico?v=20260411" />
@@ -34,7 +48,7 @@
     <!-- Auth Overlay -->
     <div id="authOverlay" class="auth-overlay" style="display: none;">
         <div class="auth-card" id="authContainer">
-            <!-- Populated by script.js -->
+            <!-- Populated by js/auth.js -->
         </div>
     </div>
 
@@ -113,7 +127,7 @@
 
             <!-- Watchlist Random Spotlight Hero Banner -->
             <div id="watchlistBannerSection" class="watchlist-spotlight-section" style="display: none;">
-                <!-- Populated dynamically by script.js -->
+                <!-- Populated dynamically by js/ -->
             </div>
 
             <!-- Recently Watched Section -->
@@ -536,7 +550,22 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
     <script src="universes-data.js"></script>
-    <script src="script.js"></script>
+    <!-- Order matters: js/app.js must load last -->
+    <script src="js/translations.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/keyboard.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/sync.js"></script>
+    <script src="js/discover.js"></script>
+    <script src="js/stats.js"></script>
+    <script src="js/universes.js"></script>
+    <script src="js/lists.js"></script>
+    <script src="js/episodes.js"></script>
+    <script src="js/spotlight.js"></script>
+    <script src="js/settings.js"></script>
+    <script src="js/views.js"></script>
+    <script src="js/player.js"></script>
+    <script src="js/app.js"></script>
 </body>
 
 </html>

@@ -1,0 +1,118 @@
+/* Compact Mode Styles */
+body.compact-mode .movie-grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 1.5rem;
+}
+
+body.compact-mode .movie-card .movie-info {
+    padding: 1rem;
+}
+
+body.compact-mode .movie-card .movie-title {
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    body.compact-mode .movie-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.6rem;
+    }
+}
+
+/* TV Mode Styles */
+body.tv-mode {
+    --radius-md: 24px;
+    --radius-lg: 32px;
+    font-size: 1.25rem;
+}
+
+body.tv-mode .glass-nav {
+    height: 100px;
+    padding: 0 6rem;
+}
+
+body.tv-mode .logo {
+    font-size: 2.2rem;
+}
+
+body.tv-mode .nav-btn {
+    font-size: 1.2rem;
+    padding: 0.8rem 1.8rem;
+    gap: 12px;
+}
+
+body.tv-mode .content-container {
+    margin-top: 100px;
+    padding: 3rem 6rem;
+}
+
+body.tv-mode .section-title {
+    font-size: 2.6rem;
+}
+
+body.tv-mode .movie-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 3rem;
+}
+
+body.tv-mode .movie-title {
+    font-size: 1.3rem;
+}
+
+body.tv-mode .movie-meta {
+    font-size: 1.1rem;
+}
+
+/* TV Mode Focused Elements */
+body.tv-mode *:focus,
+body.tv-mode .focused {
+    outline: none !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 5px var(--primary-glow), 0 20px 40px rgba(0, 0, 0, 0.6) !important;
+    transform: scale(1.08) translateY(-10px) !important;
+    z-index: 100 !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+body.tv-mode .nav-btn.focused {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%) !important;
+    color: white !important;
+    transform: scale(1.1) !important;
+}
+
+body.tv-mode .movie-card.focused .movie-info {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+body.tv-mode .search-input:focus {
+    box-shadow: 0 0 0 5px var(--primary-glow) !important;
+    transform: scale(1.02) !important;
+}
+
+body.tv-mode .watch-header {
+    padding: 2rem 4rem;
+}
+
+body.tv-mode .watch-title-area h2 {
+    font-size: 2.6rem;
+}
+
+body.tv-mode .action-btn-main {
+    padding: 1.1rem 2.2rem;
+    font-size: 1.2rem;
+}
+
+body.tv-mode .source-chip {
+    padding: 0.9rem 1.8rem;
+    font-size: 1.1rem;
+}
+
+body.tv-mode .episode-card {
+    padding: 1.5rem;
+}
+
+body.tv-mode .episode-title {
+    font-size: 1.25rem;
+}
+

@@ -1,0 +1,111 @@
+/* Legal Modal Styling */
+.legal-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    animation: fadeIn 0.25s ease;
+}
+
+.legal-modal-card {
+    background: rgba(14, 15, 24, 0.96);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 680px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(139, 92, 246, 0.15);
+    overflow: hidden;
+}
+
+.legal-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.2rem 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.legal-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.legal-header-title i {
+    color: #eab308;
+    font-size: 1.15rem;
+}
+
+.legal-header-title h3 {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: white;
+}
+
+.modal-close-icon {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: var(--transition);
+}
+
+.modal-close-icon:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.legal-modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.6;
+    font-size: 0.88rem;
+}
+
+.legal-article h4 {
+    color: white;
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.legal-article h4 i {
+    color: var(--primary);
+    font-size: 0.85rem;
+}
+
+.legal-article p {
+    color: var(--text-muted);
+}
+
+.legal-article strong,
+.legal-article em {
+    color: #e2e8f0;
+}
+
+.legal-modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: flex-end;
+}
+

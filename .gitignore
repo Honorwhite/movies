@@ -1,0 +1,5 @@
+.DS_Store
+
+# Database backups contain user data and passwords: never commit them
+*backup*.sql
+*.dump
