@@ -23,15 +23,16 @@ class UniversesMethods {
 
         const isTr = this.state.settings.language === 'tr';
 
-        // 1. Proactively deep scan movies in watched list that are missing collection info
+        // 1. Proactively deep scan movies in watched list that are missing collection info (in background)
         const moviesToScan = this.state.watched.filter(m =>
             (m.media_type === 'movie' || !m.media_type) &&
             m.belongs_to_collection === undefined &&
             !m._deepScanned
         );
-        if (moviesToScan.length > 0) {
+        if (moviesToScan.length > 0 && !this._deepScanRunning) {
+            this._deepScanRunning = true;
             const batch = moviesToScan.slice(0, 30);
-            await Promise.all(batch.map(async (m) => {
+            Promise.all(batch.map(async (m) => {
                 try {
                     const res = await fetch(`https://api.themoviedb.org/3/movie/${m.id}?api_key=${CONFIG.TMDB_KEY}&language=en-US`);
                     const details = await res.json();
@@ -42,8 +43,11 @@ class UniversesMethods {
                 } catch (e) {
                     m._deepScanned = true;
                 }
-            }));
-            this.saveMovieData();
+            })).then(() => {
+                this._deepScanRunning = false;
+                this.saveMovieData();
+                if (this.state.currentView === 'collections') this.renderUniversesPage(false);
+            });
         }
 
         // 2. Discover collection IDs from watched movies
@@ -102,11 +106,17 @@ class UniversesMethods {
             });
         }
 
-        // 5. Combine curated universes and user franchises
-        const universes = (window.CURATED_UNIVERSES || []).map(u => ({
-            ...u,
-            items: [...(u.items || [])]
-        }));
+        // 5. Combine curated universes (titles fetched from TMDB) and user franchises
+        const syncPromise = this.syncCuratedUniverses();
+        if (!this.state.universeItems) {
+            await syncPromise;
+        } else {
+            // Show cached data right away; re-render once fresh data arrives
+            syncPromise.then(changed => {
+                if (changed) this.renderUniversesPage(false);
+            });
+        }
+        const universes = this.getCuratedUniverses(isTr);
         const combinedUniverses = [...universes, ...userFranchises];
 
         // 6. Robust watched matching (by ID, Title, and TV episodes)
@@ -219,7 +229,8 @@ class UniversesMethods {
             const percent = total > 0 ? Math.round((watchedCount / total) * 100) : 0;
             const isCompleted = percent === 100 && total > 0;
 
-            const bgImg = u.backdrop ? (CONFIG.BASE_IMG + u.backdrop) : (items[0] && items[0].backdrop_path ? CONFIG.BASE_IMG + items[0].backdrop_path : (u.poster_path ? CONFIG.BASE_IMG + u.poster_path : ''));
+            const backdropBase = CONFIG.BACKDROP_IMG || CONFIG.BASE_IMG;
+            const bgImg = u.backdrop ? (backdropBase + u.backdrop) : (items[0] && items[0].backdrop_path ? backdropBase + items[0].backdrop_path : (u.poster_path ? CONFIG.BASE_IMG + u.poster_path : ''));
             const accent = u.accent || '#8b5cf6';
             const icon = u.icon || 'fa-layer-group';
             const displayName = isTr ? (u.name || u.nameEn) : (u.nameEn || u.name);
@@ -272,10 +283,11 @@ class UniversesMethods {
                             <div class="u-posters-strip">
                                 ${previewItems.map(item => {
                 const isW = isItemWatched(item);
-                const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
+                const thumbBase = CONFIG.THUMB_IMG || CONFIG.BASE_IMG;
+                const posterUrl = item.poster_path ? (thumbBase + item.poster_path) : '';
                 return `
                                         <div class="u-mini-poster ${isW ? 'watched' : ''}" title="${item.title}">
-                                            ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" loading="lazy">` : ''}
+                                            ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" decoding="async">` : ''}
                                         </div>
                                     `;
             }).join('')}
@@ -309,7 +321,7 @@ class UniversesMethods {
         this.state.activeModalTag = 'all';
 
         // 1. Find the universe
-        let universe = (window.CURATED_UNIVERSES || []).find(u => u.id === universeId);
+        let universe = this.getCuratedUniverses(isTr).find(u => u.id === universeId);
 
         // If not found in curated, check dynamic franchises
         if (!universe && universeId.startsWith('col-')) {
@@ -401,7 +413,8 @@ class UniversesMethods {
         const missingCount = total - watchedCount;
         const percent = total > 0 ? Math.round((watchedCount / total) * 100) : 0;
 
-        const bgImg = universe.backdrop ? (CONFIG.BASE_IMG + universe.backdrop) : '';
+        const backdropBase = CONFIG.BACKDROP_IMG || CONFIG.BASE_IMG;
+        const bgImg = universe.backdrop ? (backdropBase + universe.backdrop) : '';
         const accent = universe.accent || '#8b5cf6';
         const displayName = isTr ? (universe.name || universe.nameEn) : (universe.nameEn || universe.name);
         const displayTagline = isTr ? (universe.tagline || universe.taglineEn) : (universe.taglineEn || universe.tagline);
@@ -501,13 +514,14 @@ class UniversesMethods {
                     ${displayedItems.map(item => {
             const isWatched = isItemWatched(item);
             const inWatchlist = isItemWatchlist(item);
-            const posterUrl = item.poster_path ? (CONFIG.BASE_IMG + item.poster_path) : '';
+            const modalImgBase = CONFIG.MODAL_IMG || CONFIG.BASE_IMG;
+            const posterUrl = item.poster_path ? (modalImgBase + item.poster_path) : '';
             const mType = item.media_type || item.type || 'movie';
 
             return `
-                            <div class="u-item-card">
+                            <div class="u-item-card ${isWatched ? 'is-watched' : ''}">
                                 <div class="u-item-poster-wrap">
-                                    ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" loading="lazy">` : ''}
+                                    ${posterUrl ? `<img src="${posterUrl}" alt="${item.title}" decoding="async">` : ''}
                                     ${isWatched ? `
                                         <div class="u-item-watched-badge">
                                             <i class="fas fa-check"></i> ${isTr ? 'İzlendi' : 'Watched'}
@@ -688,6 +702,183 @@ class UniversesMethods {
         if (modal) modal.style.display = 'none';
         document.body.style.overflow = '';
         this.state.activeUniverseModalId = null;
+    }
+
+    // universes-data.js only holds each collection's look and its TMDB `sources`; the titles
+    // themselves are fetched from TMDB and cached in localStorage for a while.
+    getCuratedUniverses(isTr) {
+        const lists = this.state.universeItems || {};
+        return (window.CURATED_UNIVERSES || []).map(u => ({
+            ...u,
+            items: (lists[u.id] || []).map(it => ({ ...it, tag: isTr ? it.tagTr : it.tagEn }))
+        }));
+    }
+
+    // Resolves to true when lists were fetched from TMDB, false when the cache was used.
+    syncCuratedUniverses() {
+        const CACHE_KEY = 'ct_universe_items_v2';
+        const TTL = 12 * 60 * 60 * 1000;
+
+        if (this._universeSyncPromise) return this._universeSyncPromise;
+
+        let cache = null;
+        try {
+            cache = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+        } catch (e) {
+            cache = null;
+        }
+        if (cache && cache.data) this.state.universeItems = cache.data;
+        if (cache && cache.data && Date.now() - cache.ts < TTL) return Promise.resolve(false);
+
+        const previous = (cache && cache.data) || {};
+        this._universeSyncPromise = (async () => {
+            const data = {};
+            await Promise.all((window.CURATED_UNIVERSES || []).map(async (u) => {
+                try {
+                    data[u.id] = await this.fetchUniverseItems(u);
+                } catch (e) {
+                    console.error(`Universe fetch failed (${u.id}):`, e);
+                    if (previous[u.id]) data[u.id] = previous[u.id];
+                }
+            }));
+            this.state.universeItems = data;
+            try {
+                localStorage.removeItem('ct_universe_updates_v1');
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+            } catch (e) { /* storage full; keep in memory only */ }
+            return true;
+        })().finally(() => {
+            this._universeSyncPromise = null;
+        });
+        return this._universeSyncPromise;
+    }
+
+    async tmdbGet(path, params = {}) {
+        const query = new URLSearchParams({ api_key: CONFIG.TMDB_KEY, language: 'en-US', ...params });
+        const res = await fetch(`https://api.themoviedb.org/3/${path}?${query}`);
+        if (!res.ok) throw new Error(`TMDB ${res.status} (${path})`);
+        return res.json();
+    }
+
+    // Collects released titles from every source of a universe. Earlier sources win when a
+    // title appears in several (so their tag is used). Throws if a source fails, so the
+    // previously cached list is kept instead of a partial one.
+    async fetchUniverseItems(universe) {
+        const d = new Date();
+        const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const excludeIds = new Set((universe.excludeIds || []).map(Number));
+
+        const perSource = await Promise.all((universe.sources || []).map(src => this.fetchUniverseSource(src, today)));
+
+        const seen = new Set();
+        const items = [];
+        perSource.forEach(list => list.forEach(it => {
+            const key = `${it.media_type}-${it.id}`;
+            if (seen.has(key) || excludeIds.has(Number(it.id))) return;
+            seen.add(key);
+            items.push(it);
+        }));
+        return items.sort((a, b) => a.release_date.localeCompare(b.release_date));
+    }
+
+    async fetchUniverseSource(src, today) {
+        const MAX_PAGES = 5;
+        const discoverAll = async (media, params) => {
+            const dateField = media === 'movie' ? 'primary_release_date' : 'first_air_date';
+            const results = [];
+            for (let page = 1; page <= MAX_PAGES; page++) {
+                const json = await this.tmdbGet(`discover/${media}`, {
+                    ...params,
+                    sort_by: `${dateField}.asc`,
+                    [`${dateField}.lte`]: today,
+                    page
+                });
+                results.push(...(json.results || []));
+                if (page >= (json.total_pages || 1)) break;
+            }
+            return results.map(r => ({ ...r, media_type: media }));
+        };
+
+        let raw = [];
+        let minVotes = 0;
+        let mustContain = '';
+
+        if (src.keywords || src.companies) {
+            minVotes = 20;
+            const media = src.media || ['movie', 'tv'];
+            const filter = src.keywords ? { with_keywords: src.keywords } : { with_companies: src.companies };
+            const lists = await Promise.all(media.map(m => discoverAll(m, {
+                ...filter,
+                ...(m === 'movie' ? { 'with_runtime.gte': 60 } : {}), // skip shorts and one-shots
+                ...(src.genres && m === 'movie' ? { with_genres: src.genres } : {})
+            })));
+            raw = lists.flat();
+        } else if (src.collection) {
+            const col = await this.fetchCollectionDetails(src.collection);
+            if (!col || !col.parts) throw new Error(`Collection ${src.collection} unavailable`);
+            raw = col.parts.map(p => ({ ...p, media_type: 'movie' }));
+        } else if (src.person) {
+            // Director credits, limited to feature-length films
+            const [credits, features] = await Promise.all([
+                this.tmdbGet(`person/${src.person}/movie_credits`),
+                discoverAll('movie', { with_crew: src.person, 'with_runtime.gte': 60 })
+            ]);
+            const directed = new Set((credits.crew || []).filter(c => c.job === 'Director').map(c => c.id));
+            raw = features.filter(f => directed.has(f.id));
+        } else if (src.search) {
+            minVotes = 20;
+            mustContain = src.search.toLowerCase();
+            const media = src.media || ['movie', 'tv'];
+            const lists = await Promise.all(media.map(async m => {
+                const json = await this.tmdbGet(`search/${m}`, { query: src.search });
+                return (json.results || []).map(r => ({ ...r, media_type: m }));
+            }));
+            raw = lists.flat();
+        } else if (src.ids) {
+            raw = await Promise.all(src.ids.map(async ({ id, media = 'movie' }) => {
+                const r = await this.tmdbGet(`${media}/${id}`);
+                return { ...r, media_type: media, genre_ids: (r.genres || []).map(g => g.id) };
+            }));
+        }
+        if (src.minVotes !== undefined) minVotes = src.minVotes;
+
+        // Documentaries, music videos, kids/news/reality/talk shows and TV movies
+        const excludedGenres = new Set([99, 10402, 10762, 10763, 10764, 10767, 10770]);
+        const excludeTitle = src.excludeTitle ? new RegExp(src.excludeTitle, 'i') : null;
+
+        const tagFor = (it) => {
+            if (it.media_type === 'tv' && src.tvTag) return src.tvTag;
+            if (src.dateTags) {
+                const match = src.dateTags.find(dt => !dt.until || it.release_date <= dt.until);
+                if (match) return match.tag;
+            }
+            return src.tag || { tr: '', en: '' };
+        };
+
+        return raw
+            .map(r => ({
+                id: r.id,
+                media_type: r.media_type,
+                title: r.title || r.name || r.original_title || r.original_name || '',
+                release_date: r.release_date || r.first_air_date || '',
+                score: Math.round((r.vote_average || 0) * 10) / 10,
+                poster_path: r.poster_path,
+                backdrop_path: r.backdrop_path,
+                overview: (r.overview || '').length > 180 ? r.overview.substring(0, 180) + '...' : (r.overview || ''),
+                genres: r.genre_ids || [],
+                votes: r.vote_count || 0
+            }))
+            .filter(it =>
+                it.release_date && it.release_date <= today &&
+                it.votes >= minVotes &&
+                !it.genres.some(g => excludedGenres.has(g)) &&
+                !(excludeTitle && excludeTitle.test(it.title)) &&
+                !(mustContain && !it.title.toLowerCase().includes(mustContain))
+            )
+            .map(({ genres, votes, ...it }) => {
+                const tag = tagFor(it);
+                return { ...it, year: it.release_date.substring(0, 4), tagTr: tag.tr, tagEn: tag.en };
+            });
     }
 
     async fetchCollectionDetails(id) {

@@ -20,7 +20,7 @@ Sonra tarayıcıda `http://localhost:8080` adresini açın.
 
 ```
 index.html            Sayfa iskeleti
-universes-data.js     Film evrenleri verisi
+universes-data.js     Film evrenleri ve yönetmen koleksiyonlarının tanımı (yapım listeleri `sources` kurallarıyla TMDB'den çekilir)
 js/                   Uygulama kodu (index.html'deki sırayla yüklenir, app.js en son)
   translations.js     Türkçe / İngilizce metinler
   config.js           API adresleri, Supabase istemcisi, katalog ve tür listeleri

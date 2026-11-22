@@ -1,6 +1,9 @@
 const CONFIG = {
     TMDB_KEY: '4a9f3fe6b13e66b0dd355b7318b7e0e4',
     BASE_IMG: 'https://image.tmdb.org/t/p/w500',
+    THUMB_IMG: 'https://image.tmdb.org/t/p/w185',
+    MODAL_IMG: 'https://image.tmdb.org/t/p/w342',
+    BACKDROP_IMG: 'https://image.tmdb.org/t/p/w780',
     HERO_IMG: 'https://image.tmdb.org/t/p/original',
     SUPABASE_URL: 'https://gbdqycgclxhblhhjhpbm.supabase.co',
     AUTH_EMAIL_DOMAIN: 'users.cinetrack.app',

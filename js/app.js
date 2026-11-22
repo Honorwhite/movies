@@ -69,6 +69,7 @@ class CineTrack {
         this.renderCatalogs();
 
         // Load initial data in background
+        this.syncCuratedUniverses();
         if (this.state.user) {
             this.loadMovieData(); // No await here to speed up startup
             this.fetchTrending();
